@@ -50,6 +50,10 @@ cd monometis/
 mamba env create -f polymetis/environment.yml
 conda activate robo
 
+# install pytorch 2.7
+# INFO: When this .md got updated, there is only a pytorch2.7 version which is on the test wheel. I assume in near future, a stable version of pytorch 2.7 will released. Please add then to the environment.yml files again!
+pip3 install torch==2.7.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu128
+
 # compile stuff, no need to build libfranka on this machine
 mkdir -p ./polymetis/build
 cd ./polymetis/build
