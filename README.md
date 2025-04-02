@@ -57,7 +57,7 @@ pip3 install torch==2.7.0 torchvision torchaudio --index-url https://download.py
 # compile stuff, no need to build libfranka on this machine
 mkdir -p ./polymetis/build
 cd ./polymetis/build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
+cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j
 cd ../..
 
