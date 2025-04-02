@@ -53,7 +53,7 @@ conda activate robo
 # compile stuff, no need to build libfranka on this machine
 mkdir -p ./polymetis/build
 cd ./polymetis/build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 make -j
 cd ../..
 
