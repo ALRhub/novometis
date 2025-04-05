@@ -34,33 +34,45 @@ pip install -e ./polymetis
 
 ### On Workstation
 
-1) Create a **gpu** environment with dependencies.
-It assumes that cuda11.8 is installed on the machine.
-Modify `polymetis/environment.yml` if a different version is desired.
-The relevant dependencies for pytorch are `pytorch=2.0.1=py3.9_cuda11.8_cudnn8.7.0_0`
-and `pytorch-cuda=11.8`.
+**Note**: this installation was done on Ubuntu 22.04 with an RTX 5080.
+Nvidia's 50 series GPUs currently only support the latest version of pytorch, either 2.7.* or the nightly build.
 
 
-2) Build & install polymetis
+First, install system requirements (requires sudo rights)
+
+```bash
+sudo apt install build-essential cmake libssl-dev
+```
+
+Next, set up a conda/mamba environment for the compilation step:
 
 ```bash
 # clone & create *gpu* env
 git clone git@github.com:intuitive-robots/irl_polymetis.git
-cd monometis/
-mamba env create -f polymetis/environment.yml
-conda activate robo
+cd polymetis/
+conda env create -f polymetis/environment.yml
+conda activate polymetis
+```
 
+Next, install pytorch via pip, as this is currently the preferred installation method
+
+```bash
 # install pytorch 2.7
 # INFO: When this .md got updated, there is only a pytorch2.7 version which is on the test wheel. I assume in near future, a stable version of pytorch 2.7 will released. Please add then to the environment.yml files again!
 pip3 install torch==2.7.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu128
+```
 
-# compile stuff, no need to build libfranka on this machine
-mkdir -p ./polymetis/build
-cd ./polymetis/build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j
-cd ../..
+Compile and install polymetis:
 
+```bash
+# no need to build libfranka on this machine
+cmake -S polymetis -B polymetis/build -DCMAKE_BUILD_TYPE=Release
+cmake --build polymetis/build -j
+cmake --install polymetis/build
+```
+
+Install the polymetis package:
+```bash
 # inside the project root
 pip install -e ./polymetis
 ```
@@ -68,7 +80,7 @@ pip install -e ./polymetis
 for irl users, try this cmake + downgrade mkl
 ```
 conda install mkl==2024.0.0
-CUDACXX=/usr/local/cuda-12.4/bin/nvcc /usr/bin/cmake .. -DCMAKE_BUILD_TYPE=Release
+CUDACXX=/usr/local/cuda-12.4/bin/nvcc /usr/bin/cmake -S polymetis -B polymetis/build -DCMAKE_BUILD_TYPE=Release
 ```
 
 ## Launch Polymetis (IRL)

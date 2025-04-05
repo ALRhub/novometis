@@ -1,18 +1,13 @@
 name: polymetis
 channels:
-  - pytorch
-  - nvidia
-  - fair-robotics
   - conda-forge
-  - defaults
-
+  - nodefaults
 dependencies:
   - python=3.10
   - pip
 
   # Build dependencies
-  - assimp #
-  - cmake #
+  - assimp
   - doxygen
   - eigen
   - grpc-cpp

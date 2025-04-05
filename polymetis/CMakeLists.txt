@@ -113,8 +113,6 @@ include_directories(
 add_library(polymetis_server "src/polymetis_server.cpp")
 
 target_link_libraries(polymetis_server
-    $ENV{CONDA_PREFIX}/lib/libpinocchio_default.so
-    $ENV{CONDA_PREFIX}/lib/libpinocchio_parsers.so
     generated_grpc_protos
     yaml-cpp
     spdlog::spdlog

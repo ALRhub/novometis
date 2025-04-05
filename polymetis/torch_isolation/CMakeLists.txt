@@ -46,3 +46,11 @@ target_link_libraries(torchscript_pinocchio PRIVATE
     "${TORCH_LIBRARIES}"
     torchrot
 )
+
+# by default, set the install prefix to the conda environment
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "$ENV{CONDA_PREFIX}" CACHE PATH "Default install path" FORCE)
+endif()
+
+# installs to $CONDA_PREFIX/lib/libtorchscript_pinocchio.so by default
+install(TARGETS torchrot torchscript_pinocchio lib)
