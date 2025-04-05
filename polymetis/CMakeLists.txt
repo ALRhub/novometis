@@ -32,8 +32,9 @@ endif()
 find_package(yaml-cpp REQUIRED)
 
 ### eigen3
-find_package(Eigen3 REQUIRED)
-
+if(NOT TARGET Eigen3)
+    find_package(Eigen3 REQUIRED)
+endif()
 
 # Find protoc
 set(_PROTOBUF_PROTOC $ENV{CONDA_PREFIX}/bin/protoc)
@@ -99,39 +100,59 @@ target_link_libraries(generated_grpc_protos
     ${_PROTOBUF_LIBPROTOBUF}
 )
 
-include_directories(
-    include
-    "${CMAKE_CURRENT_BINARY_DIR}"
-    "$ENV{CONDA_PREFIX}/include/"
-    ${EIGEN3_INCLUDE_DIR}
-    ${pinocchio_INCLUDE_DIRS}
-    "${CMAKE_CURRENT_SOURCE_DIR}/torch_isolation/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/torch_isolation/pinocchio_isolation/include"
-)
+if(BUILD_SERVER)
+  # include_directories(
+  #     ${CMAKE_CURRENT_SOURCE_DIR}/include
+  #     ${CMAKE_CURRENT_BINARY_DIR}
+  #     $ENV{CONDA_PREFIX}/include  # TODO: remove this
+  #     ${EIGEN3_INCLUDE_DIR}
+  #     # ${pinocchio_INCLUDE_DIRS}
+  #     # ${CMAKE_CURRENT_SOURCE_DIR}/torch_isolation/include
+  #     # ${CMAKE_CURRENT_SOURCE_DIR}/torch_isolation/pinocchio_isolation/include
+  # )
 
-# Add server
-add_library(polymetis_server "src/polymetis_server.cpp")
 
-target_link_libraries(polymetis_server
-    generated_grpc_protos
-    yaml-cpp
-    spdlog::spdlog
-)
-target_link_libraries(polymetis_server -Wl,--no-as-needed torchscript_pinocchio)
-target_link_libraries(polymetis_server -Wl,--no-as-needed torchrot)
-target_link_libraries(polymetis_server -Wl,--no-as-needed torch_server_ops)
+  # Add server
+  add_library(polymetis_server "src/polymetis_server.cpp")
+  target_include_directories(polymetis_server PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+      ${CMAKE_CURRENT_BINARY_DIR}
+      $ENV{CONDA_PREFIX}/include/
+      ${EIGEN3_INCLUDE_DIR}
+  )
+  target_link_libraries(polymetis_server
+      generated_grpc_protos
+      yaml-cpp
+      spdlog::spdlog
+  )
+  target_link_libraries(polymetis_server -Wl,--no-as-needed torchscript_pinocchio)
+  target_link_libraries(polymetis_server -Wl,--no-as-needed torchrot)
+  target_link_libraries(polymetis_server -Wl,--no-as-needed torch_server_ops)
 
-add_executable(run_server "src/run_server.cpp")
-target_link_libraries(run_server polymetis_server)
+  add_executable(run_server "src/run_server.cpp")
+  target_include_directories(run_server PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+      ${CMAKE_CURRENT_BINARY_DIR}
+      $ENV{CONDA_PREFIX}/include/
+      ${EIGEN3_INCLUDE_DIR}
+  )
+  target_link_libraries(run_server polymetis_server)
 
-# Add test client
-add_executable(empty_statistics_client "src/clients/empty_statistics_client.cpp"
-)
-target_link_libraries(empty_statistics_client
-    generated_grpc_protos
-    yaml-cpp
-    spdlog::spdlog
-)
+  # Add test client
+  add_executable(empty_statistics_client "src/clients/empty_statistics_client.cpp"
+  )
+  target_include_directories(empty_statistics_client PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+      ${CMAKE_CURRENT_BINARY_DIR}
+      $ENV{CONDA_PREFIX}/include/
+      ${EIGEN3_INCLUDE_DIR}
+  )
+  target_link_libraries(empty_statistics_client
+      generated_grpc_protos
+      yaml-cpp
+      spdlog::spdlog
+  )
+endif()
 
 if(BUILD_ALLEGRO)
   add_library(allegro_hand

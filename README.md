@@ -66,7 +66,7 @@ Compile and install polymetis:
 
 ```bash
 # no need to build libfranka on this machine
-cmake -S polymetis -B polymetis/build -DCMAKE_BUILD_TYPE=Release
+cmake -S polymetis -B polymetis/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SERVER=ON
 cmake --build polymetis/build -j
 cmake --install polymetis/build
 ```
