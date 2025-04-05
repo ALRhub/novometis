@@ -20,6 +20,11 @@ find_package(Eigen3 REQUIRED)
 set(pinocchio_DIR $ENV{CONDA_PREFIX}/lib/cmake/pinocchio)
 find_package(pinocchio REQUIRED)
 
+# Path to the pinocchio library is not set correctly in the pinocchioConfig.cmake file
+set_target_properties(pinocchio::pinocchio PROPERTIES
+    IMPORTED_LOCATION "$ENV{CONDA_PREFIX}/lib/libpinocchio.so"
+)
+
 include_directories(
     "include"
     ${EIGEN3_INCLUDE_DIR}
