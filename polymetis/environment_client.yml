@@ -12,6 +12,7 @@ dependencies:
   - libprotobuf=3.18
   - yaml-cpp=0.7
   - grpc-cpp=1.42
+  - spdlog
 
   # Run dependencies
   - protobuf=3.18
