@@ -49,7 +49,7 @@ Next, set up a conda/mamba environment for the compilation step:
 ```bash
 # clone & create *gpu* env
 git clone git@github.com:intuitive-robots/irl_polymetis.git
-cd polymetis/
+cd irl_polymetis/
 conda env create -n polymetis -f polymetis/environment_client.yml
 conda activate polymetis
 ```

@@ -8,8 +8,11 @@ dependencies:
 
   # Build dependencies
   - eigen
-  - libprotobuf=3.18
   - pinocchio<3.0
+  - libprotobuf=3.18
+  - yaml-cpp=0.7
+  - grpc-cpp=1.42
 
   # Run dependencies
   - protobuf=3.18
+  - grpcio==1.42
