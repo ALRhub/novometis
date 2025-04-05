@@ -101,17 +101,6 @@ target_link_libraries(generated_grpc_protos
 )
 
 if(BUILD_SERVER)
-  # include_directories(
-  #     ${CMAKE_CURRENT_SOURCE_DIR}/include
-  #     ${CMAKE_CURRENT_BINARY_DIR}
-  #     $ENV{CONDA_PREFIX}/include  # TODO: remove this
-  #     ${EIGEN3_INCLUDE_DIR}
-  #     # ${pinocchio_INCLUDE_DIRS}
-  #     # ${CMAKE_CURRENT_SOURCE_DIR}/torch_isolation/include
-  #     # ${CMAKE_CURRENT_SOURCE_DIR}/torch_isolation/pinocchio_isolation/include
-  # )
-
-
   # Add server
   add_library(polymetis_server "src/polymetis_server.cpp")
   target_include_directories(polymetis_server PRIVATE

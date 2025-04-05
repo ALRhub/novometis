@@ -57,8 +57,8 @@ set_target_properties(torchscript_pinocchio PROPERTIES CXX_VISIBILITY_PRESET hid
 target_include_directories(torchscript_pinocchio PUBLIC ${COMMON_INCLUDE_DIRS})
 target_link_libraries(torchscript_pinocchio PRIVATE
     pinocchio_wrapper
-    torchrot
     ${TORCH_LIBRARIES}
+    torchrot
 )
 
 # by default, set the install prefix to the conda environment

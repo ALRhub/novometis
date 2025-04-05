@@ -1,51 +1,57 @@
 name: polymetis
 channels:
+  - pytorch
+  - nvidia
+  - fair-robotics
   - conda-forge
-  - nodefaults
+  - defaults
 dependencies:
-  - python=3.10
-  - pip
+    # Build dependencies
+    - assimp=5.0.1=hdca8b6f_4
+    - cmake
+    - doxygen
+    - eigen=3.3.9
+    - grpc-cpp=1.41.1
+    - hpp-fcl=1.6.0
+    - libprotobuf=3.18.1
+    - mkl-include ==2022.0.1
+    - mkl==2024.0.0
+    - openmpi=2.1.2
+    - pinocchio ==2.5.2
+    - poco ==1.9.0 # needed by libfranka
+    - python ==3.9
+    - pytorch=2.0.1=py3.9_cuda11.8_cudnn8.7.0_0
+    - torchvision
+    - pytorch-cuda=11.8
+    - urdfdom=2.3.3=hc9558a2_0
+    - urdfdom_headers=1.0.5=hc9558a2_2
+    - yaml-cpp ==0.6.3
 
-  # Build dependencies
-  # - assimp
-  # - doxygen
-  - eigen
-  - grpc-cpp=1.41
-  # - hpp-fcl
-  - libprotobuf=3.18
-  # - mkl-include
-  # - mkl
-  # - openmpi
-  - pinocchio<3.0
-  # - poco  # needed by libfranka
-  # - urdfdom
-  # - urdfdom_headers
-  - yaml-cpp=0.6
-
-  # Run dependencies
-  # - asv
-  # - black
-  # - boost
-  # - boost-cpp
-  # - breathe
-  # - dash
-  - grpcio=1.41
-  # - mujoco
-  # - hydra-core
-  # - importlib-resource
-  # - myst-parser
-  # - numpy
-  # - pandas
-  # - plotly
-  - protobuf=3.18
-  # - pybullet
-  # - pymodbus
-  # - pyserial
-  # - pytest
-  # - pytest-benchmark
-  # - scipy
-  - spdlog=1.10
-  # - sphinx
-  # - sphinx-copybutton
-  # - sphinx-book-theme
-  # - tqdm
+    # Run dependencies
+    - asv
+    - black
+    - boost ==1.72.0
+    - boost-cpp ==1.72.0
+    - breathe
+    - dash
+    - grpcio ==1.46.0
+    - mujoco
+    - hydra-core ==1.0.6
+    - importlib-resources ==5.7.1
+    - myst-parser
+    - numpy
+    - pandas
+    - plotly
+    - pip
+    - protobuf
+    - pybullet ==3.17
+    - pymodbus ==2.5.3
+    - pyserial
+    - pytest
+    - pytest-benchmark=4.0.0
+    - scipy
+    - spdlog=1.10.0=h924138e_0
+    - sphinx
+    - sphinx-copybutton
+    - sphinx-book-theme
+    - tqdm

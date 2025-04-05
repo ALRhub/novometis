@@ -29,15 +29,6 @@ set_target_properties(pinocchio::pinocchio PROPERTIES
     IMPORTED_LOCATION "$ENV{CONDA_PREFIX}/lib/libpinocchio.so"
 )
 
-message(STATUS "Pinocchio include dirs: ${pinocchio_INCLUDE_DIRS}")
-message(STATUS "Pinocchio library dirs: ${pinocchio_LIBRARIES}")
-
-get_target_property(pinocchio_location pinocchio::pinocchio IMPORTED_LOCATION)
-message(STATUS "Pinocchio library location: ${pinocchio_location}")
-
-get_target_property(pinocchio_link_libraries pinocchio::pinocchio INTERFACE_LINK_LIBRARIES)
-message(STATUS "Pinocchio linked libraries: ${pinocchio_link_libraries}")
-
 # Define pinocchio_wrapper library
 add_library(pinocchio_wrapper SHARED src/pinocchio_wrapper.cpp)
 set_target_properties(pinocchio_wrapper PROPERTIES CXX_VISIBILITY_PRESET hidden)

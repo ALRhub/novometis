@@ -50,7 +50,7 @@ Next, set up a conda/mamba environment for the compilation step:
 # clone & create *gpu* env
 git clone git@github.com:intuitive-robots/irl_polymetis.git
 cd polymetis/
-conda env create -f polymetis/environment.yml
+conda env create -n polymetis -f polymetis/environment_client.yml
 conda activate polymetis
 ```
 
@@ -66,14 +66,13 @@ Compile and install polymetis:
 
 ```bash
 # no need to build libfranka on this machine
-cmake -S polymetis -B polymetis/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SERVER=ON
+cmake -S polymetis -B polymetis/build -DCMAKE_BUILD_TYPE=Release
 cmake --build polymetis/build -j
-cmake --install polymetis/build
 ```
 
-Install the polymetis package:
+Install python runtime dependencies and the polymetis package:
 ```bash
-# inside the project root
+pip install -r polymetis/requirements.txt
 pip install -e ./polymetis
 ```
 

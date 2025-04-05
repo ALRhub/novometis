@@ -7,45 +7,9 @@ dependencies:
   - pip
 
   # Build dependencies
-  # - assimp
-  # - doxygen
   - eigen
-  - grpc-cpp=1.41
-  # - hpp-fcl
   - libprotobuf=3.18
-  # - mkl-include
-  # - mkl
-  # - openmpi
   - pinocchio<3.0
-  # - poco  # needed by libfranka
-  # - urdfdom
-  # - urdfdom_headers
-  - yaml-cpp=0.6
 
   # Run dependencies
-  # - asv
-  # - black
-  # - boost
-  # - boost-cpp
-  # - breathe
-  # - dash
-  - grpcio=1.41
-  # - mujoco
-  # - hydra-core
-  # - importlib-resource
-  # - myst-parser
-  # - numpy
-  # - pandas
-  # - plotly
   - protobuf=3.18
-  # - pybullet
-  # - pymodbus
-  # - pyserial
-  # - pytest
-  # - pytest-benchmark
-  # - scipy
-  - spdlog=1.10
-  # - sphinx
-  # - sphinx-copybutton
-  # - sphinx-book-theme
-  # - tqdm

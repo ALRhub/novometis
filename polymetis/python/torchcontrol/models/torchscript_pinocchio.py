@@ -9,18 +9,21 @@ import torch
 from polymetis.utils.data_dir import PKG_ROOT_DIR
 
 try:
+    # print(f"loading {os.environ['CONDA_PREFIX']}/lib/libtorchscript_pinocchio.so")
     torch.classes.load_library(
         f"{os.environ['CONDA_PREFIX']}/lib/libtorchscript_pinocchio.so"
     )
-except OSError:
+    # print(f"loaded {os.environ['CONDA_PREFIX']}/lib/libtorchscript_pinocchio.so")
+except OSError as e:
     lib_path = os.path.abspath(
         os.path.join(
             PKG_ROOT_DIR,
             "../../build/torch_isolation/libtorchscript_pinocchio.so",
         )
     )
+    # print(e)
     print(
-        f"Warning: Failed to load 'libtorchscript_pinocchio.so' from CONDA_PREFIX, loading from default build directory instead: '{lib_path}'"
+        f"Warning: Failed to load 'libtorchscript_pinocchio.so' from {os.environ['CONDA_PREFIX']}/lib/libtorchscript_pinocchio.so, loading from default build directory instead: '{lib_path}'"
     )
     torch.classes.load_library(lib_path)
 
