@@ -2,30 +2,19 @@
 
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import os
-from typing import Tuple, Optional
+from ctypes.util import find_library
+from typing import Optional, Tuple
 
 import torch
-from polymetis.utils.data_dir import PKG_ROOT_DIR
 
-try:
-    # print(f"loading {os.environ['CONDA_PREFIX']}/lib/libtorchscript_pinocchio.so")
-    torch.classes.load_library(
-        f"{os.environ['CONDA_PREFIX']}/lib/libtorchscript_pinocchio.so"
+# load the custom C++ library for Pinocchio operations
+pinocchio_path = find_library("torchscript_pinocchio")
+if pinocchio_path is None:
+    raise ImportError(
+        "Could not find 'libtorchscript_pinocchio.so' library. "
+        "Make sure it is built and available in the library path."
     )
-    # print(f"loaded {os.environ['CONDA_PREFIX']}/lib/libtorchscript_pinocchio.so")
-except OSError as e:
-    lib_path = os.path.abspath(
-        os.path.join(
-            PKG_ROOT_DIR,
-            "../../build/torch_isolation/libtorchscript_pinocchio.so",
-        )
-    )
-    # print(e)
-    print(
-        f"Warning: Failed to load 'libtorchscript_pinocchio.so' from {os.environ['CONDA_PREFIX']}/lib/libtorchscript_pinocchio.so, loading from default build directory instead: '{lib_path}'"
-    )
-    torch.classes.load_library(lib_path)
+torch.classes.load_library(pinocchio_path)
 
 
 class RobotModelPinocchio(torch.nn.Module):

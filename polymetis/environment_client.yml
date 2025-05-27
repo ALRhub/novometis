@@ -1,4 +1,3 @@
-name: polymetis
 channels:
   - conda-forge
   - nodefaults

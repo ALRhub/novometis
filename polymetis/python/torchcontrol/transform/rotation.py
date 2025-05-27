@@ -4,29 +4,18 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import os
+from ctypes.util import find_library
+
 import torch
-from polymetis.utils.data_dir import PKG_ROOT_DIR
 
-
-try:
-    # print(f"loading {os.environ['CONDA_PREFIX']}/lib/libtorchrot.so")
-    torch.ops.load_library(f"{os.environ['CONDA_PREFIX']}/lib/libtorchrot.so")
-    # print(f"loaded {os.environ['CONDA_PREFIX']}/lib/libtorchrot.so")
-except OSError as e:
-    lib_path = os.path.abspath(
-        os.path.join(
-            PKG_ROOT_DIR,
-            "../../build/torch_isolation/libtorchrot.so",
-        )
+# load the custom C++ library for rotation operations
+torchrot = find_library("torchrot")
+if torchrot is None:
+    raise ImportError(
+        "Could not find 'libtorchrot.so' library. "
+        "Make sure it is built and available in the library path."
     )
-    # print(e)
-    print(
-        f"Warning: Failed to load 'libtorchrot.so' from {os.environ['CONDA_PREFIX']}/lib/libtorchrot.so, loading from default build directory instead: '{lib_path}'"
-    )
-    torch.ops.load_library(lib_path)
-
-functional = torch.ops.torchrot
+torch.classes.load_library(torchrot)
 
 
 @torch.jit.script
