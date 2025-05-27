@@ -19,7 +19,6 @@ set_property(TARGET protobuf::libprotobuf APPEND PROPERTY
 )
 
 add_subdirectory("torch_isolation/")
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
 
 if(DEFINED ENV{PREFIX})
   message("Using $ENV{PREFIX} as output dir")

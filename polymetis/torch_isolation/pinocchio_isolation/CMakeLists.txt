@@ -5,8 +5,9 @@
 cmake_minimum_required(VERSION 3.14)
 project(pinocchio_isolation)
 
-SET(CMAKE_CXX_FLAGS "-std=c++14 -O3")
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # Find spdlog (C++ logger)
 if(NOT TARGET spdlog)

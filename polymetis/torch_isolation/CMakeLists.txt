@@ -15,8 +15,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 add_subdirectory("pinocchio_isolation/")
 
-add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
-
 # Find Torch
 execute_process(
     COMMAND python3 -c "import sysconfig; print(sysconfig.get_paths()['purelib'])"
