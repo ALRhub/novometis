@@ -31,8 +31,13 @@ set_target_properties(pinocchio::pinocchio PROPERTIES
 )
 
 # Define pinocchio_wrapper library
-add_library(pinocchio_wrapper SHARED src/pinocchio_wrapper.cpp)
-set_target_properties(pinocchio_wrapper PROPERTIES CXX_VISIBILITY_PRESET hidden)
+add_library(pinocchio_wrapper STATIC src/pinocchio_wrapper.cpp)
+set_target_properties(pinocchio_wrapper PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    # adds -fPIC compile option, which generates position-independent code
+    # required for static libraries which are linked into shared libraries
+    POSITION_INDEPENDENT_CODE ON
+)
 target_include_directories(pinocchio_wrapper
     PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -44,11 +49,3 @@ target_link_libraries(pinocchio_wrapper
     pinocchio::pinocchio
     spdlog::spdlog
 )
-
-# by default, set the install prefix to the conda environment
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "$ENV{CONDA_PREFIX}" CACHE PATH "Default install path" FORCE)
-endif()
-
-# installs to $CONDA_PREFIX/lib/libtorchscript_pinocchio.so by default
-install(TARGETS pinocchio_wrapper DESTINATION lib)
