@@ -1,1 +1,0 @@
-This folder contains the default checksums of models / datasets supported for droidlet. The agent downloads models / datasets corresponding to these sha1sums, so you can also set these to a particular value if you want to use models / datasets other than the defaults.

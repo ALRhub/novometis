@@ -1,1 +1,0 @@
-Lifted straight from https://github.com/django/django/tree/master/django/dispatch and modified as needed

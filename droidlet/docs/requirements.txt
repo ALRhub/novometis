@@ -1,4 +1,0 @@
-docutils==0.16.0
-sphinx
-sphinx-rtd-theme
-recommonmark

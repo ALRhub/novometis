@@ -1,1 +1,0 @@
-../lib/lua-struct/struct.lua

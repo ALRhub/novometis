@@ -1,1 +1,0 @@
-../../locobot/remote/navigation_service.py
