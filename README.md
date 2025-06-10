@@ -1,11 +1,57 @@
 # Polymetis for Newer PyTorch
 
-This is a "fork" of [Monometis](https://github.com/hengyuan-hu/monometis).
-It is further developed by the Intuitive-Learning-Robots Lab to enhance their Robot handling.
+Novometis is a fork of [a fork](https://github.com/intuitive-robots/irl_polymetis) of [a fork](https://github.com/hengyuan-hu/monometis) of... you know what? Just check the commit history.
 
-## Install & Compile
+This is a project based on [facebook's polymetis](https://github.com/facebookresearch/fairo/tree/main/polymetis), which is unfortunately no longer being maintained.
+Novometis is intended for robot setups involving a real-time computer without a GPU (the server) and a GPU computer used for policy inference (the client).
 
-### On NUC
+# Installation
+
+## On GPU Computer
+
+1. Install the system build requirements (requires sudo rights).
+
+```bash
+sudo apt install build-essential cmake libssl-dev
+```
+
+2. Clone the repository.
+
+```bash
+git clone git@github.com:ALRhub/novometis.git
+cd novometis
+```
+
+3. Set up a conda/mamba environment for compilation.
+This environment contains some minimal libraries that should likely not affect any of your machine learning code.
+
+```bash
+mamba env create -n polymetis -f polymetis/environment_client.yml
+mamba activate polymetis
+```
+
+4. Install your desired version of pytorch.
+You should probably install via pip, as this is currently the preferred method.
+
+```bash
+# e.g. substitute with any version of pytorch you need
+pip3 install torch --index-url https://download.pytorch.org/whl/test/cu128
+```
+
+5. Compile and install polymetis.
+
+```bash
+cmake -S polymetis -B polymetis/build -DCMAKE_BUILD_TYPE=Release
+cmake --build polymetis/build -j --target install
+```
+
+6. Install python runtime dependencies and the polymetis package itself.
+```bash
+pip install -r polymetis/requirements.txt
+pip install -e ./polymetis
+```
+
+## On Real-Time Computer
 
 1) Create a cpu environment with dependencies.
 
@@ -32,57 +78,7 @@ cd ../..
 pip install -e ./polymetis
 ```
 
-### On Workstation
-
-**Note**: this installation was done on Ubuntu 22.04 with an RTX 5080.
-Nvidia's 50 series GPUs currently only support the latest version of pytorch, either 2.7.* or the nightly build.
-
-
-First, install system requirements (requires sudo rights)
-
-```bash
-sudo apt install build-essential cmake libssl-dev
-```
-
-Next, set up a conda/mamba environment for the compilation step:
-
-```bash
-# clone & create *gpu* env
-git clone git@github.com:intuitive-robots/irl_polymetis.git
-cd irl_polymetis/
-conda env create -n polymetis -f polymetis/environment_client.yml
-conda activate polymetis
-```
-
-Next, install pytorch via pip, as this is currently the preferred installation method
-
-```bash
-# install pytorch 2.7
-# INFO: When this .md got updated, there is only a pytorch2.7 version which is on the test wheel. I assume in near future, a stable version of pytorch 2.7 will released. Please add then to the environment.yml files again!
-pip3 install torch==2.7.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu128
-```
-
-Compile and install polymetis:
-
-```bash
-# no need to build libfranka on this machine
-cmake -S polymetis -B polymetis/build -DCMAKE_BUILD_TYPE=Release
-cmake --build polymetis/build -j --target install
-```
-
-Install python runtime dependencies and the polymetis package:
-```bash
-pip install -r polymetis/requirements.txt
-pip install -e ./polymetis
-```
-
-for irl users, try this cmake + downgrade mkl
-```
-conda install mkl==2024.0.0
-CUDACXX=/usr/local/cuda-12.4/bin/nvcc /usr/bin/cmake -S polymetis -B polymetis/build -DCMAKE_BUILD_TYPE=Release
-```
-
-## Launch Polymetis (IRL)
+## Launch Polymetis
 
 To launch the robot or gripper server:
 
