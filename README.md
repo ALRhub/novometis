@@ -1,9 +1,20 @@
-# Polymetis for Newer PyTorch
+# Novometis: the Latest Fork of Polymetis!
 
 Novometis is a fork of [a fork](https://github.com/intuitive-robots/irl_polymetis) of [a fork](https://github.com/hengyuan-hu/monometis) of... you know what? Just check the commit history.
 
-This is a project based on [facebook's polymetis](https://github.com/facebookresearch/fairo/tree/main/polymetis), which is unfortunately no longer being maintained.
-Novometis is intended for robot setups involving a real-time computer without a GPU (the server) and a GPU computer used for policy inference (the client).
+Novometis is based on [facebook's polymetis](https://github.com/facebookresearch/fairo/tree/main/polymetis), which is unfortunately no longer being maintained.
+It is primarily intended for robot setups involving a real-time computer without a GPU (the server) and a GPU computer used for policy inference (the client).
+Regarding robot hardware, we focus on the [Franka Emika Robot](https://robodk.com/robot/Franka/Emika-Panda), although the source code for other robots has not been removed.
+
+## Why Polymetis?
+
+The original goal of Polymetis was to provide a unified interface for writing robot controllers that can be used in both simulation and on real hardware.
+In practice, such an interface is almost impossible to create.
+Not only do modern simulators (e.g. IsaacSim, ManiSkill) have differing paradigms for robot control (or may not support custom controllers), but even defining a common API for all robot hardware can be too restrictive.
+
+Despite these shortcomings, Polymetis is a powerful framework for controlling robot hardware, and the source code remains a valuable resource.
+One of the main advantages of Polymetis is the ability to write robot controllers in Python instead of C++, which are then jit compiled to overcome the performance limitations of Python for real-time execution.
+As a result, these controllers don't even need to be predefined on the server, and a client can inject (almost) arbitrary code to be executed in the control loop at 1kHz!
 
 # Installation
 
@@ -34,7 +45,7 @@ mamba activate polymetis
 You should probably install via pip, as this is currently the preferred method.
 
 ```bash
-# e.g. substitute with any version of pytorch you need
+# e.g. substitute with any version of pytorch you like
 pip3 install torch --index-url https://download.pytorch.org/whl/test/cu128
 ```
 
