@@ -17,6 +17,8 @@ if torchrot is None:
     )
 torch.classes.load_library(torchrot)
 
+functional = torch.ops.torchrot
+
 
 @torch.jit.script
 class RotationObj:
