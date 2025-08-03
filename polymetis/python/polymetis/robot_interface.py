@@ -2,26 +2,28 @@
 
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+
+import atexit
 import io
-from typing import Dict, Generator, List, Tuple
-import time
+import logging
 import tempfile
 import threading
-import atexit
-import logging
-from omegaconf import DictConfig
-import hydra
+import time
+from typing import Generator
 
 import grpc  # This requires `conda install grpcio protobuf`
+import hydra
 import torch
+from omegaconf import DictConfig
 
 import polymetis
-from polymetis_pb2 import LogInterval, RobotState, ControllerChunk, Empty
+from polymetis_pb2 import ControllerChunk, Empty, LogInterval, RobotState
 from polymetis_pb2_grpc import PolymetisControllerServerStub
 
 import torchcontrol as toco
 from torchcontrol.transform import Rotation as R
 from torchcontrol.transform import Transformation as T
+from torchcontrol.utils import to_tensor
 
 log = logging.getLogger(__name__)
 
@@ -48,13 +50,13 @@ class ParamDictContainer(torch.nn.Module):
         param_dict: The dictionary mapping parameter names to values.
     """
 
-    param_dict: Dict[str, torch.Tensor]
+    param_dict: dict[str, torch.Tensor]
 
-    def __init__(self, param_dict: Dict[str, torch.Tensor]):
+    def __init__(self, param_dict: dict[str, torch.Tensor]):
         super().__init__()
         self.param_dict = param_dict
 
-    def forward(self) -> Dict[str, torch.Tensor]:
+    def forward(self) -> dict[str, torch.Tensor]:
         """Simply returns the wrapped parameter dictionary."""
         return self.param_dict
 
@@ -132,8 +134,8 @@ class BaseRobotInterface:
         return msg_generator
 
     def _get_robot_state_log(
-        self, log_interval: LogInterval, timeout: float = None
-    ) -> List[RobotState]:
+        self, log_interval: LogInterval, timeout: float | None = None
+    ) -> list[RobotState]:
         """A private helper method to get the states corresponding to a log_interval from the server.
 
         Args:
@@ -189,7 +191,7 @@ class BaseRobotInterface:
             and log_interval.end == -1  # policy has not ended
         )
 
-    def get_previous_log(self, timeout: float = None) -> List[RobotState]:
+    def get_previous_log(self, timeout: float | None = None) -> list[RobotState]:
         """Get the list of RobotStates associated with the currently running policy.
 
         Args:
@@ -206,9 +208,9 @@ class BaseRobotInterface:
         self,
         torch_policy: toco.PolicyModule,
         blocking: bool = True,
-        timeout: float = None,
+        timeout: float | None = None,
         use_mirror: bool = False,
-    ) -> List[RobotState]:
+    ) -> list[RobotState] | None:
         """Sends the ScriptableTorchPolicy to the server.
 
         Args:
@@ -254,7 +256,7 @@ class BaseRobotInterface:
                 timeout = timeout - time_passed
             return self._get_robot_state_log(log_interval, timeout=timeout)
 
-    def update_current_policy(self, param_dict: Dict[str, torch.Tensor]) -> int:
+    def update_current_policy(self, param_dict: dict[str, torch.Tensor]) -> int:
         """Updates the current policy's with a (possibly incomplete) dictionary holding the updated values.
 
         Args:
@@ -265,6 +267,7 @@ class BaseRobotInterface:
 
         """
         # Script & chunk params
+        param_dict = {k: to_tensor(v) for k, v in param_dict.items()}
         scripted_params = torch.jit.script(ParamDictContainer(param_dict))
         msg_generator = self._get_msg_generator(scripted_params)
 
@@ -278,8 +281,8 @@ class BaseRobotInterface:
         return update_interval.start - episode_interval.start
 
     def terminate_current_policy(
-        self, return_log: bool = True, timeout: float = None
-    ) -> List[RobotState]:
+        self, return_log: bool = True, timeout: float | None = None
+    ) -> list[RobotState] | None:
         """Terminates the currently running policy and (optionally) return its trajectory.
 
         Args:
@@ -354,12 +357,12 @@ class RobotInterface(BaseRobotInterface):
             urdf_file.flush()
             self.set_robot_model(urdf_file.name, self.metadata.ee_link_name)
 
-        self.set_home_pose(torch.Tensor(self.metadata.rest_pose))
+        self.set_home_pose(torch.tensor(self.metadata.rest_pose))
 
-        self.Kq_default = torch.Tensor(self.metadata.default_Kq)
-        self.Kqd_default = torch.Tensor(self.metadata.default_Kqd)
-        self.Kx_default = torch.Tensor(self.metadata.default_Kx)
-        self.Kxd_default = torch.Tensor(self.metadata.default_Kxd)
+        self.Kq_default = torch.tensor(self.metadata.default_Kq)
+        self.Kqd_default = torch.tensor(self.metadata.default_Kqd)
+        self.Kx_default = torch.tensor(self.metadata.default_Kx)
+        self.Kxd_default = torch.tensor(self.metadata.default_Kxd)
         self.hz = self.metadata.hz
 
         self.time_to_go_default = time_to_go_default
@@ -387,7 +390,7 @@ class RobotInterface(BaseRobotInterface):
         orientation: torch.Tensor,
         q0: torch.Tensor,
         tol: float = 1e-3,
-    ) -> Tuple[torch.Tensor, bool]:
+    ) -> tuple[torch.Tensor, bool]:
         """Compute inverse kinematics given desired EE pose"""
         # Call IK
         joint_pos_output = self.robot_model.inverse_kinematics(
@@ -423,16 +426,16 @@ class RobotInterface(BaseRobotInterface):
     """
 
     def get_joint_positions(self) -> torch.Tensor:
-        return torch.Tensor(self.get_robot_state().joint_positions)
+        return torch.tensor(self.get_robot_state().joint_positions)
 
     def get_joint_velocities(self) -> torch.Tensor:
-        return torch.Tensor(self.get_robot_state().joint_velocities)
+        return torch.tensor(self.get_robot_state().joint_velocities)
 
     """
     End-effector computation methods
     """
 
-    def get_ee_pose(self) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get_ee_pose(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Computes forward kinematics on the current joint angles.
 
         Returns:
@@ -443,8 +446,8 @@ class RobotInterface(BaseRobotInterface):
         pos, quat = self.robot_model.forward_kinematics(joint_pos)
         return pos, quat
 
-    def get_jacobian(joint_angles):
-        raise NotImplementedError  # TODO
+    def get_jacobian(self, joint_pos: torch.Tensor) -> torch.Tensor:
+        return self.robot_model.compute_jacobian(joint_pos)
 
     """
     Movement methods
@@ -453,12 +456,12 @@ class RobotInterface(BaseRobotInterface):
     def move_to_joint_positions(
         self,
         positions: torch.Tensor,
-        time_to_go: float = None,
+        time_to_go: float | None = None,
         delta: bool = False,
-        Kq: torch.Tensor = None,
-        Kqd: torch.Tensor = None,
+        Kq: torch.Tensor | None = None,
+        Kqd: torch.Tensor | None = None,
         **kwargs,
-    ) -> List[RobotState]:
+    ) -> list[RobotState]:
         """Uses JointGoToPolicy to move to the desired positions with the given gains.
         Args:
             positions: Desired target joint positions.
@@ -476,7 +479,7 @@ class RobotInterface(BaseRobotInterface):
 
         # Parse parameters
         joint_pos_current = self.get_joint_positions()
-        joint_pos_desired = torch.Tensor(positions)
+        joint_pos_desired = torch.tensor(positions)
         if delta:
             joint_pos_desired += joint_pos_current
 
@@ -486,7 +489,7 @@ class RobotInterface(BaseRobotInterface):
         if time_to_go is None:
             time_to_go = time_to_go_adaptive
         elif time_to_go < time_to_go_adaptive:
-            log.warn(
+            log.warning(
                 "The specified 'time_to_go' might not be large enough to ensure accurate movement."
             )
 
@@ -512,7 +515,7 @@ class RobotInterface(BaseRobotInterface):
 
         return self.send_torch_policy(torch_policy=torch_policy, **kwargs)
 
-    def go_home(self, use_mirror=False, *args, **kwargs) -> List[RobotState]:
+    def go_home(self, use_mirror=False, *args, **kwargs) -> list[RobotState]:
         """Calls move_to_joint_positions to the current home positions."""
         if use_mirror:
             assert (
@@ -529,18 +532,18 @@ class RobotInterface(BaseRobotInterface):
     def move_to_ee_pose(
         self,
         position: torch.Tensor,
-        orientation: torch.Tensor = None,
-        time_to_go: float = None,
+        orientation: torch.Tensor | None = None,
+        time_to_go: float | None = None,
         delta: bool = False,
-        Kx: torch.Tensor = None,
-        Kxd: torch.Tensor = None,
+        Kx: torch.Tensor | None = None,
+        Kxd: torch.Tensor | None = None,
         op_space_interp: bool = True,
         **kwargs,
-    ) -> List[RobotState]:
+    ) -> list[RobotState]:
         """Uses an operational space controller to move to a desired end-effector position (and, optionally orientation).
         Args:
             positions: Desired target end-effector position.
-            positions: Desired target end-effector orientation (quaternion).
+            orientation: Desired target end-effector orientation (quaternion).
             time_to_go: Amount of time to execute the motion. Uses an adaptive value if not specified (see `_adaptive_time_to_go` for details).
             delta: Whether the specified `position` and `orientation` are relative to current pose or absolute.
             Kx: P gains for the tracking controller. Uses default values if not specified.
@@ -558,7 +561,7 @@ class RobotInterface(BaseRobotInterface):
         ee_pos_current, ee_quat_current = self.get_ee_pose()
 
         # Parse parameters
-        ee_pos_desired = torch.Tensor(position)
+        ee_pos_desired = torch.tensor(position)
         if delta:
             ee_pos_desired += ee_pos_current
 
@@ -568,7 +571,7 @@ class RobotInterface(BaseRobotInterface):
             assert (
                 len(orientation) == 4
             ), "Only quaternions are accepted as orientation inputs."
-            ee_quat_desired = torch.Tensor(orientation)
+            ee_quat_desired = torch.tensor(orientation)
             if delta:
                 ee_quat_desired = (
                     R.from_quat(ee_quat_desired) * R.from_quat(ee_quat_current)
@@ -689,8 +692,8 @@ class RobotInterface(BaseRobotInterface):
 
     def update_desired_ee_pose(
         self,
-        position: torch.Tensor = None,
-        orientation: torch.Tensor = None,
+        position: torch.Tensor | None = None,
+        orientation: torch.Tensor | None = None,
     ) -> int:
         """Update the desired EE pose used by the Cartesian position control mode.
         Requires starting a Cartesian impedance controller with `start_cartesian_impedance` beforehand.
