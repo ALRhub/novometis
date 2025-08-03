@@ -9,6 +9,7 @@ import logging
 import tempfile
 import threading
 import time
+import weakref
 from typing import Generator
 
 import grpc  # This requires `conda install grpcio protobuf`
@@ -86,6 +87,7 @@ class BaseRobotInterface:
         # Create connection
         self.channel = grpc.insecure_channel(f"{ip_address}:{port}")
         self.grpc_connection = PolymetisControllerServerStub(self.channel)
+        self._finalizer = weakref.finalize(self, self.channel.close)
 
         # Get metadata
         self.metadata = (
@@ -108,9 +110,17 @@ class BaseRobotInterface:
             self.mirror_ip = mirror_ip
             self.mirror_port = mirror_port
 
-    def __del__(self):
-        # Close connection in destructor
-        self.channel.close()
+        self._policy_finalizer = None
+
+    def close(self):
+        """Close the gRPC connection."""
+        if self._policy_finalizer and self._policy_finalizer.alive:
+            self.terminate_current_policy(return_log=False)
+            log.debug("Terminated current policy before closing connection.")
+
+        if self._finalizer.alive:
+            self._finalizer()
+            log.debug("Closed gRPC connection to polymetis server.")
 
     @staticmethod
     def _get_msg_generator(scripted_module) -> Generator:
@@ -246,6 +256,10 @@ class BaseRobotInterface:
         except grpc.RpcError as e:
             raise grpc.RpcError(f"POLYMETIS SERVER ERROR --\n{e.details()}") from None
 
+        self._policy_finalizer = weakref.finalize(
+            self, self.grpc_connection.TerminateController, EMPTY
+        )
+
         if blocking:
             # Check policy termination
             while log_interval.end == -1:
@@ -300,6 +314,9 @@ class BaseRobotInterface:
         """
         # Send termination
         log_interval = self.grpc_connection.TerminateController(EMPTY)
+
+        if self._policy_finalizer and self._policy_finalizer.alive:
+            self._policy_finalizer.detach()
 
         # Query episode log
         if return_log:

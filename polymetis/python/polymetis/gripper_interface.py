@@ -6,6 +6,7 @@ import logging
 import queue
 import threading
 import time
+import weakref
 
 import grpc
 
@@ -42,6 +43,7 @@ class GripperInterface:
         # Connect to server
         self.channel = grpc.insecure_channel(f"{ip_address}:{port}")
         self.grpc_connection = polymetis_pb2_grpc.GripperServerStub(self.channel)
+        self._finalizer = weakref.finalize(self, self.channel.close)
 
         # Get metadata
         try:
@@ -74,6 +76,12 @@ class GripperInterface:
         self.wait_ns = int(rate_limit_ms * 1_000_000)  # Convert ms to ns
         # time (in ns) since the last command message was sent
         self._last_cmd_time_ns = 0
+
+    def close(self):
+        """Close the gRPC connection."""
+        if self._finalizer.alive:
+            self._finalizer()
+            log.debug("Closed gRPC connection to polymetis gripper server.")
 
     def _command_executor(self):
         while True:
