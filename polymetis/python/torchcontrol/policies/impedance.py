@@ -2,14 +2,14 @@
 
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Dict
-
 import torch
 
 import torchcontrol as toco
-from torchcontrol.transform import Transformation as T
+from torchcontrol.models.torchscript_pinocchio import RobotModelPinocchio
 from torchcontrol.transform import Rotation as R
-from torchcontrol.utils import to_tensor
+from torchcontrol.transform import Transformation as T
+from torchcontrol.types import TensorLike
+from torchcontrol.utils.tensor_utils import to_tensor
 
 
 class JointImpedanceControl(toco.PolicyModule):
@@ -19,11 +19,11 @@ class JointImpedanceControl(toco.PolicyModule):
 
     def __init__(
         self,
-        joint_pos_current,
-        Kp,
-        Kd,
-        robot_model: torch.nn.Module,
-        ignore_gravity=True,
+        joint_pos_current: TensorLike,
+        Kp: TensorLike,
+        Kd: TensorLike,
+        robot_model: RobotModelPinocchio,
+        ignore_gravity: bool = True,
     ):
         """
         Args:
@@ -46,7 +46,7 @@ class JointImpedanceControl(toco.PolicyModule):
         self.joint_pos_desired = torch.nn.Parameter(to_tensor(joint_pos_current))
         self.joint_vel_desired = torch.zeros_like(self.joint_pos_desired)
 
-    def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Args:
             state_dict: A dictionary containing robot states
@@ -80,13 +80,13 @@ class HybridJointImpedanceControl(toco.PolicyModule):
 
     def __init__(
         self,
-        joint_pos_current,
-        Kq,
-        Kqd,
-        Kx,
-        Kxd,
-        robot_model: torch.nn.Module,
-        ignore_gravity=True,
+        joint_pos_current: TensorLike,
+        Kq: TensorLike,
+        Kqd: TensorLike,
+        Kx: TensorLike,
+        Kxd: TensorLike,
+        robot_model: RobotModelPinocchio,
+        ignore_gravity: bool = True,
     ):
         """
         Args:
@@ -109,7 +109,7 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         self.joint_pos_desired = torch.nn.Parameter(to_tensor(joint_pos_current))
         self.joint_vel_desired = torch.zeros_like(self.joint_pos_desired)
 
-    def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Args:
             state_dict: A dictionary containing robot states
@@ -145,11 +145,11 @@ class CartesianImpedanceControl(toco.PolicyModule):
 
     def __init__(
         self,
-        joint_pos_current,
-        Kp,
-        Kd,
-        robot_model: torch.nn.Module,
-        ignore_gravity=True,
+        joint_pos_current: TensorLike,
+        Kp: TensorLike,
+        Kd: TensorLike,
+        robot_model: RobotModelPinocchio,
+        ignore_gravity: bool = True,
     ):
         """
         Args:
@@ -178,7 +178,7 @@ class CartesianImpedanceControl(toco.PolicyModule):
         self.ee_vel_desired = torch.nn.Parameter(torch.zeros(3))
         self.ee_rvel_desired = torch.nn.Parameter(torch.zeros(3))
 
-    def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Args:
             state_dict: A dictionary containing robot states

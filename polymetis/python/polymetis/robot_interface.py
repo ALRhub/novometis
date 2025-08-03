@@ -23,6 +23,7 @@ from polymetis_pb2_grpc import PolymetisControllerServerStub
 import torchcontrol as toco
 from torchcontrol.transform import Rotation as R
 from torchcontrol.transform import Transformation as T
+from torchcontrol.types import Number, TensorLike
 from torchcontrol.utils import to_tensor
 
 log = logging.getLogger(__name__)
@@ -256,7 +257,7 @@ class BaseRobotInterface:
                 timeout = timeout - time_passed
             return self._get_robot_state_log(log_interval, timeout=timeout)
 
-    def update_current_policy(self, param_dict: dict[str, torch.Tensor]) -> int:
+    def update_current_policy(self, param_dict: dict[str, TensorLike]) -> int:
         """Updates the current policy's with a (possibly incomplete) dictionary holding the updated values.
 
         Args:
@@ -633,7 +634,14 @@ class RobotInterface(BaseRobotInterface):
     Continuous control methods
     """
 
-    def start_joint_impedance(self, Kq=None, Kqd=None, adaptive=True, **kwargs):
+    def start_joint_impedance(
+        self,
+        adaptive: bool = True,
+        Kq: TensorLike | None = None,
+        Kqd: TensorLike | None = None,
+        Kx: TensorLike | None = None,
+        Kxd: TensorLike | None = None,
+    ):
         """Starts joint position control mode.
         Runs an non-blocking joint impedance controller.
         The desired joint positions can be updated using `update_desired_joint_positions`
@@ -643,8 +651,8 @@ class RobotInterface(BaseRobotInterface):
                 joint_pos_current=self.get_joint_positions(),
                 Kq=self.Kq_default if Kq is None else Kq,
                 Kqd=self.Kqd_default if Kqd is None else Kqd,
-                Kx=self.Kx_default,
-                Kxd=self.Kxd_default,
+                Kx=self.Kx_default if Kx is None else Kx,
+                Kxd=self.Kxd_default if Kxd is None else Kxd,
                 robot_model=self.robot_model,
                 ignore_gravity=self.use_grav_comp,
             )
@@ -659,15 +667,21 @@ class RobotInterface(BaseRobotInterface):
 
         return self.send_torch_policy(torch_policy=torch_policy, blocking=False)
 
-    def start_cartesian_impedance(self, Kx=None, Kxd=None, **kwargs):
+    def start_cartesian_impedance(
+        self,
+        Kq: TensorLike | None = None,
+        Kqd: TensorLike | None = None,
+        Kx: TensorLike | None = None,
+        Kxd: TensorLike | None = None,
+    ):
         """Starts Cartesian position control mode.
         Runs an non-blocking Cartesian impedance controller.
         The desired EE pose can be updated using `update_desired_ee_pose`
         """
         torch_policy = toco.policies.HybridJointImpedanceControl(
             joint_pos_current=self.get_joint_positions(),
-            Kq=self.Kq_default,
-            Kqd=self.Kqd_default,
+            Kq=self.Kq_default if Kq is None else Kq,
+            Kqd=self.Kqd_default if Kqd is None else Kqd,
             Kx=self.Kx_default if Kx is None else Kx,
             Kxd=self.Kxd_default if Kxd is None else Kxd,
             robot_model=self.robot_model,
@@ -676,7 +690,7 @@ class RobotInterface(BaseRobotInterface):
 
         return self.send_torch_policy(torch_policy=torch_policy, blocking=False)
 
-    def update_desired_joint_positions(self, positions: torch.Tensor) -> int:
+    def update_desired_joint_positions(self, positions: TensorLike) -> int:
         """Update the desired joint positions used by the joint position control mode.
         Requires starting a joint impedance controller with `start_joint_impedance` beforehand.
         """
@@ -692,16 +706,18 @@ class RobotInterface(BaseRobotInterface):
 
     def update_desired_ee_pose(
         self,
-        position: torch.Tensor | None = None,
-        orientation: torch.Tensor | None = None,
+        position: TensorLike | None = None,
+        orientation: TensorLike | None = None,
     ) -> int:
         """Update the desired EE pose used by the Cartesian position control mode.
         Requires starting a Cartesian impedance controller with `start_cartesian_impedance` beforehand.
         """
         joint_pos_current = self.get_joint_positions()
         ee_pos_current, ee_quat_current = self.get_ee_pose()
-        ee_pos_desired = ee_pos_current if position is None else position
-        ee_quat_desired = ee_quat_current if orientation is None else orientation
+        ee_pos_desired = ee_pos_current if position is None else to_tensor(position)
+        ee_quat_desired = (
+            ee_quat_current if orientation is None else to_tensor(orientation)
+        )
 
         joint_pos_desired, success = self.solve_inverse_kinematics(
             ee_pos_desired, ee_quat_desired, joint_pos_current
@@ -715,7 +731,11 @@ class RobotInterface(BaseRobotInterface):
         return self.update_desired_joint_positions(joint_pos_desired)
 
     def start_joint_velocity_control(
-        self, joint_vel_desired, hz=None, Kq=None, Kqd=None, **kwargs
+        self,
+        joint_vel_desired,
+        hz: Number | None = None,
+        Kq: TensorLike | None = None,
+        Kqd: TensorLike | None = None,
     ):
         """Starts joint velocity control mode.
         Runs a non-blocking joint velocity controller.
@@ -726,13 +746,13 @@ class RobotInterface(BaseRobotInterface):
             Kp=self.Kq_default if Kq is None else Kq,
             Kd=self.Kqd_default if Kqd is None else Kqd,
             robot_model=self.robot_model,
-            hz=self.metadata.hz if hz is None else hz,
+            hz=self.hz if hz is None else hz,
             ignore_gravity=self.use_grav_comp,
         )
 
         return self.send_torch_policy(torch_policy=torch_policy, blocking=False)
 
-    def update_desired_joint_velocities(self, velocities: torch.Tensor):
+    def update_desired_joint_velocities(self, velocities: TensorLike) -> int:
         """Update the desired joint velocities used by the joint velocities control mode.
         Requires starting a joint velocities controller with `start_joint_velocity_control` beforehand.
         """

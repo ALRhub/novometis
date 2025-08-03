@@ -5,6 +5,7 @@
 import torch
 
 import torchcontrol as toco
+from torchcontrol.models.torchscript_pinocchio import RobotModelPinocchio
 
 
 class InverseDynamics(toco.ControlModule):
@@ -12,7 +13,7 @@ class InverseDynamics(toco.ControlModule):
 
     use_grav_comp: bool
 
-    def __init__(self, robot_model, ignore_gravity: bool = True):
+    def __init__(self, robot_model: RobotModelPinocchio, ignore_gravity: bool = True):
         """
         Args:
             robot_model: A valid robot model module from torchcontrol.models
@@ -49,7 +50,7 @@ class InverseDynamics(toco.ControlModule):
 class Coriolis(toco.ControlModule):
     """Computes the Coriolis force"""
 
-    def __init__(self, robot_model):
+    def __init__(self, robot_model: RobotModelPinocchio):
         """
         Args:
             robot_model: A valid robot model module from torchcontrol.models

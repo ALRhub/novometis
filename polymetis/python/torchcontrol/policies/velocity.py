@@ -2,12 +2,11 @@
 
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Dict, List, Union
-
 import torch
 
 import torchcontrol as toco
-from torchcontrol.utils import to_tensor
+from torchcontrol.types import Number, TensorLike
+from torchcontrol.utils.tensor_utils import to_tensor
 
 
 class JointVelocityControl(toco.PolicyModule):
@@ -15,18 +14,17 @@ class JointVelocityControl(toco.PolicyModule):
     Velocity control in joint space.
     """
 
-    hz: int
     dt: float
     is_initialized: bool
 
     def __init__(
         self,
-        joint_vel_desired: Union[List, torch.Tensor],
-        Kp,
-        Kd,
+        joint_vel_desired: TensorLike,
+        Kp: TensorLike,
+        Kd: TensorLike,
         robot_model: torch.nn.Module,
-        hz: int,
-        ignore_gravity=True,
+        hz: Number,
+        ignore_gravity: bool = True,
     ):
         """
         Args:
@@ -53,7 +51,7 @@ class JointVelocityControl(toco.PolicyModule):
         # Initialize position desired
         self.joint_pos_desired = torch.zeros_like(self.joint_vel_desired)
 
-    def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Args:
             state_dict: A dictionary containing robot states

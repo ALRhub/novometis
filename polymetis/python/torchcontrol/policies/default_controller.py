@@ -2,12 +2,10 @@
 
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Dict
-
 import torch
 
 import torchcontrol as toco
-from torchcontrol.utils import to_tensor
+from torchcontrol.types import TensorLike
 
 
 class DefaultController(toco.PolicyModule):
@@ -15,7 +13,7 @@ class DefaultController(toco.PolicyModule):
     PD control over current state.
     """
 
-    def __init__(self, Kq, Kqd, **kwargs):
+    def __init__(self, Kq: TensorLike, Kqd: TensorLike):
         super().__init__()
 
         self.joint_pd = toco.modules.feedback.JointSpacePD(Kq, Kqd)
@@ -28,7 +26,7 @@ class DefaultController(toco.PolicyModule):
     def reset(self):
         self.running = False
 
-    def forward(self, state_dict: Dict[str, torch.Tensor]):
+    def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         joint_pos_current = state_dict["joint_positions"]
         joint_vel_current = state_dict["joint_velocities"]
 

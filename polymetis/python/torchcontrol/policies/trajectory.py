@@ -2,26 +2,26 @@
 
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Dict, List
-
 import torch
 
 import torchcontrol as toco
+from torchcontrol.models.torchscript_pinocchio import RobotModelPinocchio
 from torchcontrol.transform import Transformation as T
-from torchcontrol.utils.tensor_utils import to_tensor, stack_trajectory
+from torchcontrol.types import TensorLike
+from torchcontrol.utils.tensor_utils import stack_trajectory, to_tensor
 
 
 class JointTrajectoryExecutor(toco.PolicyModule):
     def __init__(
         self,
-        joint_pos_trajectory: List[torch.Tensor],
-        joint_vel_trajectory: List[torch.Tensor],
-        Kq,
-        Kqd,
-        Kx,
-        Kxd,
-        robot_model: torch.nn.Module,
-        ignore_gravity=True,
+        joint_pos_trajectory: list[torch.Tensor],
+        joint_vel_trajectory: list[torch.Tensor],
+        Kq: TensorLike,
+        Kqd: TensorLike,
+        Kx: TensorLike,
+        Kxd: TensorLike,
+        robot_model: RobotModelPinocchio,
+        ignore_gravity: bool = True,
     ):
         """
         Executes a joint trajectory by using a joint PD controller to stabilize around waypoints in the trajectory.
@@ -56,7 +56,7 @@ class JointTrajectoryExecutor(toco.PolicyModule):
         # Initialize step count
         self.i = 0
 
-    def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         # Parse current state
         joint_pos_current = state_dict["joint_positions"]
         joint_vel_current = state_dict["joint_velocities"]
@@ -89,8 +89,8 @@ class JointTrajectoryExecutor(toco.PolicyModule):
 class EndEffectorTrajectoryExecutor(toco.PolicyModule):
     def __init__(
         self,
-        ee_pose_trajectory: List[T.TransformationObj],
-        ee_twist_trajectory: List[torch.Tensor],
+        ee_pose_trajectory: list[T.TransformationObj],
+        ee_twist_trajectory: list[torch.Tensor],
         Kp,
         Kd,
         robot_model: torch.nn.Module,
@@ -132,7 +132,7 @@ class EndEffectorTrajectoryExecutor(toco.PolicyModule):
         # Initialize step count
         self.i = 0
 
-    def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         # Parse current state
         joint_pos_current = state_dict["joint_positions"]
         joint_vel_current = state_dict["joint_velocities"]
@@ -210,7 +210,7 @@ class iLQR(toco.PolicyModule):
         # Initialize step count
         self.i = 0
 
-    def forward(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Args:
             state_dict: Robot state dictionary

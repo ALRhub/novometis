@@ -7,7 +7,8 @@ import torch
 import torchcontrol as toco
 from torchcontrol.transform import Rotation as R
 from torchcontrol.transform import Transformation as T
-from torchcontrol.utils.tensor_utils import to_tensor, diagonalize_gain
+from torchcontrol.types import TensorLike
+from torchcontrol.utils.tensor_utils import diagonalize_gain, to_tensor
 
 
 class LinearFeedback(toco.ControlModule):
@@ -20,7 +21,7 @@ class LinearFeedback(toco.ControlModule):
         - K: Gain matrix of shape (nA, nS)
     """
 
-    def __init__(self, K: torch.Tensor):
+    def __init__(self, K: TensorLike):
         """
         Args:
             K: Gain matrix of shape (nA, nS) or shape (nS,) representing a nS-by-nS diagonal matrix (if nA=nS)
@@ -51,7 +52,7 @@ class JointSpacePD(toco.ControlModule):
         - Kd: D gain matrix of shape (nA, N)
     """
 
-    def __init__(self, Kp: torch.Tensor, Kd: torch.Tensor):
+    def __init__(self, Kp: TensorLike, Kd: TensorLike):
         """
         Args:
             Kp: P gain matrix of shape (nA, N) or shape (N,) representing a N-by-N diagonal matrix (if nA=N)
@@ -103,7 +104,7 @@ class HybridJointSpacePD(toco.ControlModule):
     """
 
     def __init__(
-        self, Kq: torch.Tensor, Kqd: torch.Tensor, Kx: torch.Tensor, Kxd: torch.Tensor
+        self, Kq: TensorLike, Kqd: TensorLike, Kx: TensorLike, Kxd: TensorLike
     ):
         """
         Args:
@@ -164,7 +165,7 @@ class CartesianSpacePDFast(toco.ControlModule):
         - Kd: D gain matrix of shape (6, 6)
     """
 
-    def __init__(self, Kp: torch.Tensor, Kd: torch.Tensor):
+    def __init__(self, Kp: TensorLike, Kd: TensorLike):
         """
         Args:
             Kp: P gain matrix of shape (6, 6) or shape (6,) representing a 6-by-6 diagonal matrix
