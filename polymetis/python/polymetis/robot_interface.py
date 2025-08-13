@@ -152,7 +152,7 @@ class BaseRobotInterface:
         def cancel_rpc():
             log.info("Cancelling attempt to get robot state log.")
             robot_state_generator.cancel()
-            log.info(f"Cancellation completed.")
+            log.info("Cancellation completed.")
 
         atexit.register(cancel_rpc)
 
@@ -480,7 +480,7 @@ class RobotInterface(BaseRobotInterface):
 
         # Parse parameters
         joint_pos_current = self.get_joint_positions()
-        joint_pos_desired = torch.tensor(positions)
+        joint_pos_desired = torch.as_tensor(positions)
         if delta:
             joint_pos_desired += joint_pos_current
 
@@ -562,7 +562,7 @@ class RobotInterface(BaseRobotInterface):
         ee_pos_current, ee_quat_current = self.get_ee_pose()
 
         # Parse parameters
-        ee_pos_desired = torch.tensor(position)
+        ee_pos_desired = torch.as_tensor(position)
         if delta:
             ee_pos_desired += ee_pos_current
 
@@ -572,7 +572,7 @@ class RobotInterface(BaseRobotInterface):
             assert (
                 len(orientation) == 4
             ), "Only quaternions are accepted as orientation inputs."
-            ee_quat_desired = torch.tensor(orientation)
+            ee_quat_desired = torch.as_tensor(orientation)
             if delta:
                 ee_quat_desired = (
                     R.from_quat(ee_quat_desired) * R.from_quat(ee_quat_current)
