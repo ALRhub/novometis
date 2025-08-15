@@ -5,19 +5,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os
-import logging
-import subprocess
 import atexit
+import glob
+import logging
+import os
+import signal
+import subprocess
 import sys
 import time
-import signal
 
 import hydra
 
-from polymetis.utils.grpc_utils import check_server_exists
 from polymetis.utils.data_dir import BUILD_DIR, which
-
+from polymetis.utils.grpc_utils import check_server_exists
 
 log = logging.getLogger(__name__)
 
@@ -28,9 +28,7 @@ def main(cfg):
     os.environ["PATH"] = BUILD_DIR + os.pathsep + os.environ["PATH"]
 
     # Check if another server is alive on address
-    assert not check_server_exists(
-        cfg.ip, cfg.port
-    ), (
+    assert not check_server_exists(cfg.ip, cfg.port), (
         "Port unavailable; possibly another server found on designated address. "
         "To prevent undefined behavior, start the service on a different port or "
         "kill stale servers with 'pkill -9 run_server'"
@@ -49,8 +47,35 @@ def main(cfg):
     if cfg.use_real_time:
         server_cmd += ["-r"]
 
+    conda_prefix = os.environ["CONDA_PREFIX"]
+    # add conda lib to (both) envs
+    env = os.environ
+    env["LD_LIBRARY_PATH"] = (
+        f"{conda_prefix}/lib"
+        + os.pathsep
+        + os.environ["LD_LIBRARY_PATH"]
+    )
+    # add cuda only to server env
+    server_env = os.environ.copy()
+    # find whatever python version's torch
+    torch_libs = glob.glob("lib/*/site-packages/torch/lib", root_dir=conda_prefix)
+    assert len(torch_libs) > 0
+    log.info(f"Adding {len(torch_libs)} lib paths to found torch packages")
+    server_env["LD_LIBRARY_PATH"] = (
+        # f"{conda_prefix}/lib"
+        # + os.pathsep
+        # +os.pathsep.join(conda_prefix + os.sep + torch_lib for torch_lib in torch_libs)
+        os.pathsep.join(conda_prefix + os.sep + torch_lib for torch_lib in torch_libs)
+        + os.pathsep
+        + os.environ["LD_LIBRARY_PATH"]
+    )
+
     server_output = subprocess.Popen(
-        server_cmd, stdout=sys.stdout, stderr=sys.stderr, preexec_fn=os.setpgrp
+        server_cmd,
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+        preexec_fn=os.setpgrp,
+        env=server_env,
     )
     pgid = os.getpgid(server_output.pid)
 

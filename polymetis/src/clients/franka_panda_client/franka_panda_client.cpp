@@ -37,6 +37,18 @@ FrankaTorqueControlClient::FrankaTorqueControlClient(
   RobotClientMetadata metadata;
   assert(metadata.ParseFromString(buffer.str()));
 
+  spdlog::info("Halksdjklsad");
+  // 3. Output each byte in escaped hex form
+  for (unsigned char c : buffer.str()) {
+    std::cout << "\\x" << std::uppercase << std::hex << std::setw(2)
+              << std::setfill('0') << static_cast<int>(c);
+  }
+  std::cout << std::dec << std::endl;
+
+  spdlog::info(buffer.str());
+  spdlog::info(metadata.DebugString());
+  spdlog::info(metadata.dof());
+
   // Initialize robot client with metadata
   ClientContext context;
   Empty empty;

@@ -64,5 +64,7 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "$ENV{CONDA_PREFIX}" CACHE PATH "Default install path" FORCE)
 endif()
 
+message(CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX})
+
 # installs to $CONDA_PREFIX/lib/libtorchscript_pinocchio.so by default
 install(TARGETS torchrot torchscript_pinocchio DESTINATION lib)

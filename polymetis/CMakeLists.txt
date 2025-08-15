@@ -9,14 +9,28 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
-add_library(protobuf::libprotobuf UNKNOWN IMPORTED)
-set_target_properties(protobuf::libprotobuf PROPERTIES
-  INTERFACE_INCLUDE_DIRECTORIES "$ENV{CONDA_PREFIX}/include/google/protobuf/")
-set_target_properties(protobuf::libprotobuf PROPERTIES
-  IMPORTED_LOCATION "$ENV{CONDA_PREFIX}/lib/libprotobuf.so")
-set_property(TARGET protobuf::libprotobuf APPEND PROPERTY
-  INTERFACE_COMPILE_FEATURES cxx_std_11
-)
+find_package(absl CONFIG REQUIRED)
+
+message(STATUS absl_VERSION=${absl_VERSION})
+
+find_package(Protobuf CONFIG REQUIRED)
+include_directories(${Protobuf_INCLUDE_DIRS})
+message(STATUS Protobuf_VERSION=${Protobuf_VERSION})
+message(STATUS Protobuf_INCLUDE_DIRS=${Protobuf_INCLUDE_DIRS})
+message(STATUS Protobuf_DIR=${Protobuf_DIR})
+
+find_package(gRPC CONFIG REQUIRED)
+message(STATUSgRPC_VERSION=${gRPC_VERSION})
+
+
+# add_library(protobuf::libprotobuf UNKNOWN IMPORTED)
+# set_target_properties(protobuf::libprotobuf PROPERTIES
+#   INTERFACE_INCLUDE_DIRECTORIES "$ENV{CONDA_PREFIX}/include/google/protobuf/")
+# set_target_properties(protobuf::libprotobuf PROPERTIES
+#   IMPORTED_LOCATION "$ENV{CONDA_PREFIX}/lib/libprotobuf.so")
+# set_property(TARGET protobuf::libprotobuf APPEND PROPERTY
+#   INTERFACE_COMPILE_FEATURES cxx_std_11
+# )
 
 add_subdirectory("torch_isolation/")
 
@@ -140,6 +154,14 @@ if(BUILD_SERVER)
       yaml-cpp
       spdlog::spdlog
   )
+
+  # installs to $CONDA_PREFIX/bin/[run_server,empty_statistics_client] by default
+  # by default, set the install prefix to the conda environment
+  if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+      set(CMAKE_INSTALL_PREFIX "$ENV{CONDA_PREFIX}" CACHE PATH "Default install path" FORCE)
+  endif()
+  install(TARGETS run_server empty_statistics_client DESTINATION bin)
+
 endif()
 
 if(BUILD_ALLEGRO)
@@ -197,6 +219,7 @@ if(BUILD_FRANKA)
   include_directories(
     ${Franka_INCLUDE_DIRS}
   )
+  message(STATUS ${Franka_INCLUDE_DIRS})
 
   # Add Franka clients
   add_executable(franka_panda_client
@@ -209,6 +232,13 @@ if(BUILD_FRANKA)
     spdlog::spdlog
   )
 
+  target_include_directories(franka_panda_client PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+      ${CMAKE_CURRENT_BINARY_DIR}
+      $ENV{CONDA_PREFIX}/include/
+      ${EIGEN3_INCLUDE_DIR}
+  )
+
   add_executable(franka_hand_client
     src/clients/franka_panda_client/franka_hand_client.cpp
   )
@@ -218,6 +248,20 @@ if(BUILD_FRANKA)
     yaml-cpp
     spdlog::spdlog
   )
+
+  target_include_directories(franka_hand_client PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+      ${CMAKE_CURRENT_BINARY_DIR}
+      $ENV{CONDA_PREFIX}/include/
+      ${EIGEN3_INCLUDE_DIR}
+  )
+
+  # installs to $CONDA_PREFIX/bin/[franka_hand_client,franka_panda_client] by default
+  # by default, set the install prefix to the conda environment
+  if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+      set(CMAKE_INSTALL_PREFIX "$ENV{CONDA_PREFIX}" CACHE PATH "Default install path" FORCE)
+  endif()
+  install(TARGETS franka_hand_client franka_panda_client DESTINATION bin)
 endif()
 
 

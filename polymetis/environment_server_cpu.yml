@@ -1,0 +1,28 @@
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python
+  - pip
+
+  # Build dependencies
+  - eigen
+  - numpy>=2.0
+  - pinocchio<=3.3 # pinocchio 3.4+ seems to have some issue where hpp-fcl is not found
+  - libprotobuf=6.31.1
+  # - libprotobuf=5.29.3
+  - yaml-cpp
+  - libgrpc
+  - spdlog
+
+  - poco # needed by libfranka, 1.14.2 works and 1.13.3 with C++11
+
+  # Run dependencies
+  - protobuf=6.31.1
+  # - protobuf=5.29.3
+  - grpcio
+  - pip
+  - pip:
+      - torch --index-url https://download.pytorch.org/whl/cpu
+      - torchvision --index-url https://download.pytorch.org/whl/cpu
+      - hydra-core

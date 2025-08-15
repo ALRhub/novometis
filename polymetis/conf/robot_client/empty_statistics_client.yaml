@@ -1,5 +1,7 @@
+# @package _global_
 robot_client:
   _target_: polymetis.robot_client.executable_robot_client.ExecutableRobotClient
+  _recursive_: False
   use_real_time: ${use_real_time}
   metadata_cfg:
     _target_: polymetis.robot_client.metadata.RobotClientMetadata
@@ -16,7 +18,7 @@ robot_client:
     num_dofs: ${robot_model.num_dofs}
 
     exec: empty_statistics_client
-    robot_client_metadata_path: ???
+    robot_client_metadata_path: null
 
 use_real_time: true
 num_requests: 5000

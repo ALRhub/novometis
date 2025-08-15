@@ -77,21 +77,31 @@ pip install -e ./polymetis
 
 ```bash
 # clone & create env
-git clone git@github.com:intuitive-robots/irl_polymetis.git
-cd monometis/
-mamba env create -f polymetis/environment_cpu.yml
-conda activate robo
+git clone git@github.com:ALRhub/novometis.git
+cd novometis
+mamba env create -n "novometis_server_cpu" -f polymetis/environment_server_cpu.yml
+conda activate novometis_server_cpu
 
-# compile stuff
-./scripts/build_libfranka.sh
-mkdir -p ./polymetis/build
-cd ./polymetis/build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_FRANKA=ON
-make -j
-cd ../..
+# if build_libfranka.sh fails because of readline errors (bash version but conda only knows incompatible readline 8.2 still)
+# then overwrite env libreadline with system one (there is probably a better proper way to doing this)
+ln -s /usr/lib/libreadline.so.8.3 ~/.conda/envs/novometis_server_cpu/lib/libreadline.so.8.3   
+ln -sf ~/.conda/envs/novometis_server_cpu/lib/libreadline.so.8.3 ~/.conda/envs/novometis_server_cpu/lib/libreadline.so.8
 
-# inside the project root
-pip install -e ./polymetis
+# pytorch ships some old version of protobuf which causes compilation issues.
+# renaming seems like a dumb approach but I can't figure out how to make cmake ignore that subdir otherwise
+mv ~/.conda/envs/novometis_server_cpu/lib/python3.13/site-packages/torch/include/google/protobuf ~/.conda/envs/novometis_server_cpu/lib/python3.13/site-packages/torch/include/google/protobuf-backup
+
+# compile and install stuff
+./scripts/build_polymetis.sh
+
+# undo renaming (if you care, seems to work fine in renamed state and makes recompile easier)
+mv ~/.conda/envs/novometis_server_cpu/lib/python3.13/site-packages/torch/include/google/protobuf-backup ~/.conda/envs/novometis_server_cpu/lib/python3.13/site-packages/torch/include/google/protobuf
+
+# try 
+launch_robot.py -cp=$(pwd)/polymetis robot_client=empty_statistics_client use_real_time=False
+
+# or 
+launch_robot.py -cp=$(pwd)/polymetis robot_client=franka_hardware use_real_time=False robot_client.executable_cfg.mock=true   
 ```
 
 ## Launch Polymetis

@@ -1,9 +1,11 @@
+# @package _global_
 hz: 1000
 use_real_time: true
 exec: franka_panda_client
 
 robot_client:
   _target_: polymetis.robot_client.executable_robot_client.ExecutableRobotClient
+  _recursive_: False
   use_real_time: ${use_real_time}
   metadata_cfg:
     _target_: polymetis.robot_client.metadata.RobotClientMetadata
