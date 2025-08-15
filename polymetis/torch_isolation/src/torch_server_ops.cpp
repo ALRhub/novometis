@@ -3,7 +3,6 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 #include "torch_server_ops.hpp"
-#include "spdlog/spdlog.h"
 #include <istream>
 #include <streambuf>
 #include <torch/jit.h>
@@ -70,8 +69,7 @@ TorchRobotState::TorchRobotState(int num_dofs) {
 
   // Create initial state dictionary
   rs_timestamp_ = new TorchTensor{torch::zeros(2).to(torch::kInt32)};
-  rs_joint_positions_ =
-      new TorchTensor{torch::zeros(num_dofs, torch::dtype(torch::kFloat32))};
+  rs_joint_positions_ = new TorchTensor{torch::zeros(num_dofs)};
   rs_joint_velocities_ = new TorchTensor{torch::zeros(num_dofs)};
   rs_motor_torques_measured_ = new TorchTensor{torch::zeros(num_dofs)};
   rs_motor_torques_external_ = new TorchTensor{torch::zeros(num_dofs)};
@@ -92,10 +90,6 @@ TorchRobotState::TorchRobotState(int num_dofs) {
 
 TorchRobotState::~TorchRobotState() {
   delete rs_timestamp_;
-  spdlog::info("Deleting {:#x}",
-               reinterpret_cast<std::uintptr_t>(this));
-  spdlog::info("rs_joint_positions_ Pointer value: {:#x}",
-               reinterpret_cast<std::uintptr_t>(rs_joint_positions_));
   delete rs_joint_positions_;
   delete rs_joint_velocities_;
   delete rs_motor_torques_measured_;
@@ -109,49 +103,13 @@ void TorchRobotState::update_state(int timestamp_s, int timestamp_ns,
                                    std::vector<float> joint_velocities,
                                    std::vector<float> motor_torques_measured,
                                    std::vector<float> motor_torques_external) {
-  spdlog::info("Hello There! I'm {:#x}",
-               reinterpret_cast<std::uintptr_t>(this));
-  spdlog::info("rs_joint_positions_ Pointer value: {:#x}",
-               reinterpret_cast<std::uintptr_t>(rs_joint_positions_));
-  // auto a = torch::zeros(3, torch::dtype(torch::kFloat32));
-  // auto a = torch::zeros(3);
-  auto b = new TorchTensor{torch::zeros(3)};
-  spdlog::info("{:f}", b->data[0].item<float>());
-  spdlog::info("Size {:d}", rs_joint_positions_->data.size(0));
-  spdlog::info("Dim {:d}", rs_joint_positions_->data.dim());
-  spdlog::info("Numel {:d}", rs_joint_positions_->data.numel());
-  // spdlog::info(rs_joint_positions_->data.sizes());
-  spdlog::info("{:f}", rs_joint_positions_->data[0].item<float>());
-  spdlog::info("A");
   rs_timestamp_->data[0] = timestamp_s;
-  spdlog::info("B");
   rs_timestamp_->data[1] = timestamp_ns;
-  spdlog::info("C");
   for (int i = 0; i < joint_positions.size(); i++) {
-    spdlog::info("D");
-    spdlog::info("rs_joint_positions_ Pointer value: {:#x}",
-                 reinterpret_cast<std::uintptr_t>(rs_joint_positions_));
-    spdlog::info(
-        "rs_joint_positions_->data Pointer value: {:#x}",
-        reinterpret_cast<std::uintptr_t>(&(rs_joint_positions_->data)));
-    spdlog::info("i= {:d}", i);
-    spdlog::info("joint_positions[i] value: {:f}", joint_positions[i]);
-    // spdlog::info("rs_joint_positions_->data.data_ptr<float>()[i] value: {:f}",
-    //              rs_joint_positions_->data.data_ptr<float>()[i]);
-    // spdlog::info("rs_joint_positions_->data[i] value: {:f}",
-    //              rs_joint_positions_->data[i].item<float>());
-    // crashes: rs_joint_positions_->data.index_put_({i}, joint_positions[i]);
-    // spdlog::info(
-    //     "rs_joint_positions_->data.accessor<float, 1>()[i] value: {:f}",
-    //     rs_joint_positions_->data.accessor<float, 1>()[i]);
-    // try rs_joint_positions_->data.accessor<float, 1>()[i]
     // try some way to clone entire vector?
-    // rs_joint_positions_->data[i] = joint_positions[i];
-    spdlog::info("E");
+    rs_joint_positions_->data[i] = joint_positions[i];
     rs_joint_velocities_->data[i] = joint_velocities[i];
-    spdlog::info("F");
     rs_motor_torques_measured_->data[i] = motor_torques_measured[i];
-    spdlog::info("G");
     rs_motor_torques_external_->data[i] = motor_torques_external[i];
   }
 }

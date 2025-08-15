@@ -100,8 +100,10 @@ mv ~/.conda/envs/novometis_server_cpu/lib/python3.13/site-packages/torch/include
 # try 
 launch_robot.py -cp=$(pwd)/polymetis robot_client=empty_statistics_client use_real_time=False
 
-# or 
+# or launch this
 launch_robot.py -cp=$(pwd)/polymetis robot_client=franka_hardware use_real_time=False robot_client.executable_cfg.mock=true   
+# and then run (separately)
+benchmark_control_latency.py
 ```
 
 ## Launch Polymetis
