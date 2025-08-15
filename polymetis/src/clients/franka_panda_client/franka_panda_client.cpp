@@ -29,25 +29,13 @@ FrankaTorqueControlClient::FrankaTorqueControlClient(
       config["robot_client_metadata_path"].as<std::string>();
 
   // Load robot client metadata
-  std::ifstream file(robot_client_metadata_path);
+  std::ifstream file(robot_client_metadata_path,
+                     std::ios::in | std::ios::binary);
   assert(file);
-  std::stringstream buffer;
-  buffer << file.rdbuf();
-  file.close();
+
   RobotClientMetadata metadata;
-  assert(metadata.ParseFromString(buffer.str()));
-
-  spdlog::info("Halksdjklsad");
-  // 3. Output each byte in escaped hex form
-  for (unsigned char c : buffer.str()) {
-    std::cout << "\\x" << std::uppercase << std::hex << std::setw(2)
-              << std::setfill('0') << static_cast<int>(c);
-  }
-  std::cout << std::dec << std::endl;
-
-  spdlog::info(buffer.str());
-  spdlog::info(metadata.DebugString());
-  spdlog::info(metadata.dof());
+  bool ok = metadata.ParseFromIstream(&file);
+  assert(ok);
 
   // Initialize robot client with metadata
   ClientContext context;
@@ -315,7 +303,7 @@ void FrankaTorqueControlClient::checkStateLimits(
                       cartesian_pos_ulimits_, false, force_buf,
                       margin_cartesian_pos_, k_cartesian_pos_, "EE position");
 
-  std::array<double, 6 *NUM_DOFS> jacobian_array = model_ptr_->zeroJacobian(
+  std::array<double, 6 * NUM_DOFS> jacobian_array = model_ptr_->zeroJacobian(
       franka::Frame::kEndEffector, libfranka_robot_state);
   Eigen::Map<const Eigen::Matrix<double, 6, NUM_DOFS>> jacobian(
       jacobian_array.data());
