@@ -411,11 +411,13 @@ class RobotInterface(BaseRobotInterface):
     Setter methods
     """
 
-    def set_home_pose(self, home_pose: torch.Tensor):
+    def set_home_pose(self, home_pose: TensorLike):
         """Sets the home pose for `go_home()` to use."""
-        self.home_pose = home_pose
+        self.home_pose = to_tensor(home_pose)
 
-    def set_robot_model(self, robot_description_path: str, ee_link_name: str = None):
+    def set_robot_model(
+        self, robot_description_path: str, ee_link_name: str | None = None
+    ):
         """Loads the URDF as a RobotModelPinocchio."""
         # Create Torchscript Pinocchio model for DynamicsControllers
         self.robot_model = toco.models.RobotModelPinocchio(
@@ -450,13 +452,27 @@ class RobotInterface(BaseRobotInterface):
     def get_jacobian(self, joint_pos: torch.Tensor) -> torch.Tensor:
         return self.robot_model.compute_jacobian(joint_pos)
 
+    def get_state_dict(self) -> dict[str, torch.Tensor]:
+        state = self.get_robot_state()
+        joint_pos = torch.tensor(state.joint_positions)
+        joint_vel = torch.tensor(state.joint_velocities)
+        ee_pose = torch.cat(self.robot_model.forward_kinematics(joint_pos))
+        jacobian = self.robot_model.compute_jacobian(joint_pos)
+
+        return {
+            "joint_pos": joint_pos,
+            "joint_vel": joint_vel,
+            "ee_pose": ee_pose,
+            "ee_vel": jacobian @ joint_vel,
+        }
+
     """
     Movement methods
     """
 
     def move_to_joint_positions(
         self,
-        positions: torch.Tensor,
+        positions: TensorLike,
         time_to_go: float | None = None,
         delta: bool = False,
         Kq: torch.Tensor | None = None,
@@ -474,15 +490,11 @@ class RobotInterface(BaseRobotInterface):
         Returns:
             Same as `send_torch_policy`
         """
-        assert (
-            self.robot_model is not None
-        ), "Robot model not assigned! Call 'set_robot_model(<path_to_urdf>, <ee_link_name>)' to enable use of dynamics controllers"
-
         # Parse parameters
         joint_pos_current = self.get_joint_positions()
-        joint_pos_desired = torch.as_tensor(positions)
+        joint_pos_desired = to_tensor(positions)
         if delta:
-            joint_pos_desired += joint_pos_current
+            joint_pos_desired = joint_pos_current + joint_pos_desired
 
         time_to_go_adaptive = self._adaptive_time_to_go(
             joint_pos_desired - joint_pos_current
@@ -532,7 +544,7 @@ class RobotInterface(BaseRobotInterface):
 
     def move_to_ee_pose(
         self,
-        position: torch.Tensor,
+        position: torch.Tensor | None = None,
         orientation: torch.Tensor | None = None,
         time_to_go: float | None = None,
         delta: bool = False,
@@ -554,17 +566,23 @@ class RobotInterface(BaseRobotInterface):
         Returns:
             Same as `send_torch_policy`
         """
-        assert (
-            self.robot_model is not None
-        ), "Robot model not assigned! Call 'set_robot_model(<path_to_urdf>, <ee_link_name>)' to enable use of dynamics controllers"
+        if position is None and orientation is None:
+            log.warning("Both position and orientation are None. No movement will be executed.")
+            return []
 
-        joint_pos_current = self.get_joint_positions()
-        ee_pos_current, ee_quat_current = self.get_ee_pose()
+        state = self.get_robot_state()
+        joint_pos_current = torch.tensor(state.joint_positions)
+        ee_pos_current, ee_quat_current = self.robot_model.forward_kinematics(
+            joint_pos_current
+        )
 
         # Parse parameters
-        ee_pos_desired = torch.as_tensor(position)
-        if delta:
-            ee_pos_desired += ee_pos_current
+        if position is None:
+            ee_pos_desired = ee_pos_current
+        else:
+            ee_pos_desired = to_tensor(position)
+            if delta:
+                ee_pos_desired = ee_pos_current + ee_pos_desired
 
         if orientation is None:
             ee_quat_desired = ee_quat_current
@@ -572,8 +590,9 @@ class RobotInterface(BaseRobotInterface):
             assert (
                 len(orientation) == 4
             ), "Only quaternions are accepted as orientation inputs."
-            ee_quat_desired = torch.as_tensor(orientation)
+            ee_quat_desired = to_tensor(orientation)
             if delta:
+                # left-multiply the orientation delta
                 ee_quat_desired = (
                     R.from_quat(ee_quat_desired) * R.from_quat(ee_quat_current)
                 ).as_quat()
@@ -690,10 +709,16 @@ class RobotInterface(BaseRobotInterface):
 
         return self.send_torch_policy(torch_policy=torch_policy, blocking=False)
 
-    def update_desired_joint_positions(self, positions: TensorLike) -> int:
+    def update_desired_joint_positions(
+        self, positions: TensorLike, delta: bool = False
+    ) -> int:
         """Update the desired joint positions used by the joint position control mode.
         Requires starting a joint impedance controller with `start_joint_impedance` beforehand.
         """
+        if delta:
+            joint_pos_current = self.get_joint_positions()
+            positions = joint_pos_current + to_tensor(positions)
+
         try:
             update_idx = self.update_current_policy({"joint_pos_desired": positions})
         except grpc.RpcError as e:
@@ -708,17 +733,39 @@ class RobotInterface(BaseRobotInterface):
         self,
         position: TensorLike | None = None,
         orientation: TensorLike | None = None,
+        delta: bool = False,
     ) -> int:
         """Update the desired EE pose used by the Cartesian position control mode.
         Requires starting a Cartesian impedance controller with `start_cartesian_impedance` beforehand.
         """
-        joint_pos_current = self.get_joint_positions()
-        ee_pos_current, ee_quat_current = self.get_ee_pose()
-        ee_pos_desired = ee_pos_current if position is None else to_tensor(position)
-        ee_quat_desired = (
-            ee_quat_current if orientation is None else to_tensor(orientation)
+        state = self.get_robot_state()
+        joint_pos_current = torch.tensor(state.joint_positions)
+        ee_pos_current, ee_quat_current = self.robot_model.forward_kinematics(
+            joint_pos_current
         )
 
+        # Parse parameters
+        if position is None:
+            ee_pos_desired = ee_pos_current
+        else:
+            ee_pos_desired = to_tensor(position)
+            if delta:
+                ee_pos_desired = ee_pos_current + ee_pos_desired
+
+        if orientation is None:
+            ee_quat_desired = ee_quat_current
+        else:
+            assert (
+                len(orientation) == 4
+            ), "Only quaternions are accepted as orientation inputs."
+            ee_quat_desired = to_tensor(orientation)
+            if delta:
+                # left-multiply the orientation delta
+                ee_quat_desired = (
+                    R.from_quat(ee_quat_desired) * R.from_quat(ee_quat_current)
+                ).as_quat()
+
+        # Compute joint space target
         joint_pos_desired, success = self.solve_inverse_kinematics(
             ee_pos_desired, ee_quat_desired, joint_pos_current
         )

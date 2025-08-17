@@ -2,18 +2,24 @@
 
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+from typing import Sequence
+
 import torch
 
-
-def to_tensor(input):
-    """Converts the input into a ``torch.Tensor`` of the default dtype."""
-    if torch.is_tensor(input):
-        return input.to(torch.Tensor())
-    else:
-        return torch.tensor(input).to(torch.Tensor())
+from torchcontrol.types import TensorLike
 
 
-def stack_trajectory(input):
+def to_tensor(input: TensorLike, ensure_copy: bool = False) -> torch.Tensor:
+    """Converts the input into a ``torch.Tensor`` of the default dtype on the
+    cpu.
+    """
+    t = torch.as_tensor(input, device="cpu")
+    if t is input and ensure_copy:
+        t = t.clone()
+    return t
+
+
+def stack_trajectory(input: torch.Tensor | Sequence[torch.Tensor]) -> torch.Tensor:
     if torch.is_tensor(input):
         return input
     else:
@@ -21,7 +27,7 @@ def stack_trajectory(input):
         return torch.stack(input)
 
 
-def diagonalize_gain(input: torch.Tensor):
+def diagonalize_gain(input: torch.Tensor) -> torch.Tensor:
     """Converts a 1-D vector into a diagonal 2-D matrix.
 
     - If the input tensor is 1-dimensional, interprets it as the diagonal
