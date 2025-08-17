@@ -31,6 +31,10 @@ class ControlModule(torch.nn.Module):
             "_": torch.Tensor()
         }  # torchscript can't convert empty dicts
         super().__init__()
+        # True if the controller parameters have just been updated
+        # if this value is used by controllers, it must be set to False in the
+        # forward method
+        self.params_updated = True
 
     def register_parameter(
         self, name: str, param: Optional[torch.nn.Parameter]
@@ -47,6 +51,9 @@ class ControlModule(torch.nn.Module):
         """Method for updating module parameters."""
         for name in update_dict.keys():
             self._param_dict[name].data.copy_(update_dict[name])
+
+        # mark that the parameters have been updated
+        self.params_updated = True
 
     # TODO: Implicitly check input/output format/dimensions?
     # TODO: Warn users against common error of not calling 'super().__init__()'?
