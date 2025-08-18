@@ -41,6 +41,11 @@ mamba env create -n polymetis -f polymetis/environment_client.yml
 mamba activate polymetis
 ```
 
+If you already have an existing conda environment activated, run the following instead:
+```bash
+mamba env update -f polymetis/environment_client.yml
+```
+
 4. Install your desired version of pytorch.
 You should probably install via pip, as this is currently the preferred method.
 
