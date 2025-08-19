@@ -5,6 +5,7 @@
 import logging
 import multiprocessing as mp
 import os
+import queue
 import time
 from typing import List, Tuple
 
@@ -111,6 +112,7 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
         if self.gui and self.async_render:
             # Launch render process and IPC queue
             self._state_queue = mp.Queue(maxsize=1)
+            self.last_sent = 0
             self._render_proc = mp.Process(
                 target=_render_loop,
                 args=(
@@ -203,16 +205,7 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
         self.prev_torques_measured = applied_torques.copy()
 
         self.robot_data.ctrl = applied_torques
-        real_time_before = time.perf_counter_ns()
-        mj_time_before = self.robot_data.time
         mujoco.mj_step(self.robot_model, self.robot_data)
-        real_time_after = time.perf_counter_ns()
-        mj_time_after = self.robot_data.time
-        # print(
-        #     (mj_time_after - mj_time_before)
-        #     / (real_time_after - real_time_before)
-        #     * 1e9
-        # )
         if self.gui:
             self.render()
 
@@ -250,20 +243,20 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
 
     def _maybe_send_state(self):
         """Send state to render process at reduced FPS."""
-        # Only send every Nth step
-        step_interval = max(1, self.hz // self.gui_fps)
-        if (
-            int(self.robot_data.time / self.robot_model.opt.timestep) % step_interval
-            == 0
-        ):
-            # Non-blocking replace old state
-            try:
-                while True:
-                    self._state_queue.get_nowait()
-                    print("Queue clear")
-            except Exception:
-                print("Empty queue clear")
-                pass
+        if self.robot_data.time > self.last_sent + 1 / self.gui_fps:
+            # if queue is not empty, then last render was slow and still happening
+            if not self._state_queue.empty():
+                # replace with newer state
+                try:
+                    while True:
+                        self._state_queue.get_nowait()
+                except queue.Empty:
+                    pass
+                # print("Queue cleared, render not at gui fps")
+            else:
+                # print("Empty queue at gui fps")
+                # render thread finished, so the following send should hold for 1/fps now
+                self.last_sent = self.robot_data.time
             # Shallow copy of qpos, qvel
             state = {
                 "qpos": self.robot_data.qpos.copy(),
@@ -272,7 +265,7 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
             }
             try:
                 self._state_queue.put_nowait(state)
-                print(f"Sent {self.robot_data.time}")
+                # print(f"Sent {self.robot_data.time}")
             except Exception:
                 pass
 
@@ -285,9 +278,6 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
 
 def _render_loop(queue, robot_desc_mjcf_path, width, height, fps):
     """Render process: read state and draw at up to `fps`."""
-    # import glfw
-    # import mujoco
-
     model = mujoco.MjModel.from_xml_path(robot_desc_mjcf_path)
     data = mujoco.MjData(model)
 
@@ -319,13 +309,14 @@ def _render_loop(queue, robot_desc_mjcf_path, width, height, fps):
             data.qpos[:] = state["qpos"]
             data.qvel[:] = state["qvel"]  # TODO should this be zero?
             # data.ctrl = data.qfrc_bias # TODO do we need this
-            print(f"Received {state['time']}")
+            # print(f"Received {state['time']}")
         except Exception as e:
-            print("Empty queue get")
+            # print("Empty queue get")
             pass
         now = time.time()
-        if now - last_draw >= 1.0 / fps:
-            print(now - last_draw)
+        # if now - last_draw >= 1.0 / fps:
+        if True:
+            # print(now - last_draw)
             last_draw = now
             mujoco.mj_forward(model, data)
             viewport = mujoco.MjrRect(0, 0, width, height)

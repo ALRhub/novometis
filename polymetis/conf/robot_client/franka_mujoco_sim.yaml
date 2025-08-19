@@ -18,6 +18,9 @@ robot_client:
     gui: ${gui}
     use_grav_comp: ${use_grav_comp}
     robot_model_cfg: ${robot_model}
+    hz: ${hz}
+    async_render: true
+    gui_fps: 60
   metadata_cfg:
     _target_: polymetis.robot_client.metadata.RobotClientMetadata
     default_Kq: ${default_Kq}

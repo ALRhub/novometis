@@ -134,6 +134,7 @@ class GrpcSimulationClient(AbstractRobotClient):
         # Main loop
         t = 0
         spinner = Spinner(self.hz)
+        after_spinner = time.perf_counter_ns()
         while t < time_horizon:
             if threaded:
                 # print(f"Threaded run {t}")
@@ -164,19 +165,32 @@ class GrpcSimulationClient(AbstractRobotClient):
             # TODO: have option for async mode through async calls, see
             # https://grpc.io/docs/languages/python/basics/#simple-rpc-1
             log_request_time = self.log_interval > 0 and t % self.log_interval == 0
+            before_rpc_time = time.perf_counter_ns()
             msg = self.execute_rpc_call(
                 self.connection.ControlUpdate,
                 [robot_state],
                 log_request_time=log_request_time,
             )
+            after_rpc_time = time.perf_counter_ns()
 
             # Apply action to env
             torque_command = np.array([t for t in msg.joint_torques])
+            before_sim_time = time.perf_counter_ns()
             self.env.apply_joint_torques(torque_command)
+            after_sim_time = time.perf_counter_ns()
 
             # Idle for the remainder of loop time
             t += 1
+            before_spinner = time.perf_counter_ns()
+            # 1e9 ns/s / hz = max realtime timestep in ns
+            full_rt_timestep_ns = 1e9 / self.hz
+            active_time = (before_spinner - after_spinner) / full_rt_timestep_ns
+            sim_time = (after_sim_time - before_sim_time) / full_rt_timestep_ns
+            rpc_time = (after_rpc_time - before_rpc_time) / full_rt_timestep_ns
+            if t % self.hz == 0:
+                print(f"Active {active_time:.0%}, Sim {sim_time:.0%}, Controller {rpc_time:.0%}")
             spinner.spin()
+            after_spinner = time.perf_counter_ns()
 
     def execute_rpc_call(self, request_func: Callable, args=[], log_request_time=False):
         """Executes an RPC call and performs round trip time intervals checks and logging
