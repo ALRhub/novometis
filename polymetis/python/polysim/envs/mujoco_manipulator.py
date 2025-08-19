@@ -2,15 +2,16 @@
 
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Tuple, List
 import logging
+import os
+import time
+from typing import List, Tuple
+
 import mujoco
 import numpy as np
-import os
-
 from omegaconf import DictConfig
-
 from polysim.envs import AbstractControlledEnv
+
 from polymetis.utils.data_dir import get_full_path_to_urdf
 
 log = logging.getLogger(__name__)
@@ -48,6 +49,8 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
         gui_height: int = 900,
         use_grav_comp: bool = True,
         gravity: float = 9.81,
+        hz: int = 1_000,
+        gui_fps: int = 60,
     ):
         self.robot_model_cfg = robot_model_cfg
         self.robot_description_path = get_full_path_to_urdf(
@@ -56,20 +59,23 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
         robot_desc_mjcf_path = (
             os.path.splitext(self.robot_description_path)[0] + ".mjcf"
         )
-        assert os.path.exists(
-            robot_desc_mjcf_path
-        ), f"No MJCF file found. Create an MJCF file at {robot_desc_mjcf_path} to use the MuJoCo simulator."
+        assert os.path.exists(robot_desc_mjcf_path), (
+            f"No MJCF file found. Create an MJCF file at {robot_desc_mjcf_path} to use the MuJoCo simulator."
+        )
         self.robot_model = mujoco.MjModel.from_xml_path(robot_desc_mjcf_path)
         self.robot_data = mujoco.MjData(self.robot_model)
 
+        self.hz = int(hz)
+        self.robot_model.opt.timestep = 1 / self.hz
+        self.robot_model.opt.gravity[2] = -gravity
         self.controlled_joints = self.robot_model_cfg.controlled_joints
         self.n_dofs = self.robot_model_cfg.num_dofs
-        assert (
-            len(self.controlled_joints) == self.n_dofs
-        ), f"Number of controlled joints ({len(self.controlled_joints)}) != number of DOFs ({self.n_dofs})"
-        assert (
-            self.robot_model.nu == self.n_dofs
-        ), f"Number of actuators ({self.robot_model.nu}) != number of DOFs ({self.n_dofs})"
+        assert len(self.controlled_joints) == self.n_dofs, (
+            f"Number of controlled joints ({len(self.controlled_joints)}) != number of DOFs ({self.n_dofs})"
+        )
+        assert self.robot_model.nu == self.n_dofs, (
+            f"Number of actuators ({self.robot_model.nu}) != number of DOFs ({self.n_dofs})"
+        )
 
         self.ee_link_idx = self.robot_model_cfg.ee_link_idx
         self.ee_link_name = self.robot_model_cfg.ee_link_name
@@ -92,7 +98,9 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
         self.prev_torques_external = np.zeros(self.n_dofs)
 
         self.gui = gui
+        self.gui_fps = gui_fps
         if self.gui:
+            # TODO: render in separate process at self.gui_fps without block realtime sim thread
             # https://mujoco.readthedocs.io/en/latest/programming.html#visualization
             self.gui_width = gui_width
             self.gui_height = gui_height
@@ -179,6 +187,7 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
         mujoco.mj_step(self.robot_model, self.robot_data)
 
         if self.gui:
+            # TODO: create second mj instance in other process where we just copy the state every self.fps and render async.
             self.render()
 
         return applied_torques

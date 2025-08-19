@@ -1,5 +1,6 @@
+# @package _global_
 ip: localhost
-hz: 240
+hz: 1000
 gui: true
 use_grav_comp: true
 use_real_time: false
@@ -11,6 +12,7 @@ default_Kxd: [1, 1, 1, 0.2, 0.2, 0.2]
 
 robot_client:
   _target_: polysim.grpc_sim_client.GrpcSimulationClient
+  _recursive_: False
   env_cfg:
     _target_: polysim.envs.MujocoManipulatorEnv
     gui: ${gui}

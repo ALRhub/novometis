@@ -36,8 +36,19 @@ if __name__ == "__main__":
         "Control loop latency stats in milliseconds (avg / std / max / min / success_rate): "
     )
 
+    # default Kq = [20, 30, 25, 25, 15, 10, 10], Kqd= [1.0, 1.5, 1.0, 1.0, 0.5, 0.5, 0.5] are super soft and underdamped
+    # seems like those should be frequency and damping ratio, not pd factors
+    # f = np.array([20, 30, 25, 25, 15, 10, 10])
+    # d = np.array([1.0, 1.5, 1.0, 1.0, 0.5, 0.5, 0.5])
+    f = np.array([20, 30, 25, 25, 15, 10, 10])
+    d = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+    w = 2 * np.pi * f
+    Kq = w**2
+    Kqd = 2 * d * w
     # Test joint PD
-    robot_states = robot.move_to_joint_positions(robot.get_joint_positions())
+    init = robot.get_joint_positions()
+    robot_states = robot.move_to_joint_positions(0.5 * init, Kq=Kq, Kqd=Kqd)
+    robot_states = robot.move_to_joint_positions(1.0 * init, Kq=Kq, Kqd=Kqd)
     output_episode_stats("Joint PD", robot_states)
 
     # Test cartesian PD
