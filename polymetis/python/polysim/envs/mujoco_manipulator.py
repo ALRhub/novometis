@@ -3,10 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import logging
+import multiprocessing as mp
 import os
 import time
 from typing import List, Tuple
 
+import glfw
 import mujoco
 import numpy as np
 from omegaconf import DictConfig
@@ -50,6 +52,7 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
         use_grav_comp: bool = True,
         gravity: float = 9.81,
         hz: int = 1_000,
+        async_render: bool = True,
         gui_fps: int = 60,
     ):
         self.robot_model_cfg = robot_model_cfg
@@ -99,21 +102,37 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
 
         self.gui = gui
         self.gui_fps = gui_fps
+
+        self.async_render = async_render
         if self.gui:
-            # TODO: render in separate process at self.gui_fps without block realtime sim thread
             # https://mujoco.readthedocs.io/en/latest/programming.html#visualization
             self.gui_width = gui_width
             self.gui_height = gui_height
-
+        if self.gui and self.async_render:
+            # Launch render process and IPC queue
+            self._state_queue = mp.Queue(maxsize=1)
+            self._render_proc = mp.Process(
+                target=_render_loop,
+                args=(
+                    self._state_queue,
+                    robot_desc_mjcf_path,
+                    self.gui_width,
+                    self.gui_height,
+                    self.gui_fps,
+                ),
+            )
+            self._render_proc.daemon = True
+            self._render_proc.start()
+        elif self.gui and not self.async_render:
             self.gui_camera = mujoco.MjvCamera()
             self.gui_opt = mujoco.MjvOption()
 
-            mujoco.glfw.glfw.init()
-            self.gui_window = mujoco.glfw.glfw.create_window(
+            glfw.init()
+            self.gui_window = glfw.create_window(
                 self.gui_width, self.gui_height, "Mujoco Simulation", None, None
             )
-            mujoco.glfw.glfw.make_context_current(self.gui_window)
-            mujoco.glfw.glfw.swap_interval(1)
+            glfw.make_context_current(self.gui_window)
+            glfw.swap_interval(1)
 
             mujoco.mjv_defaultCamera(self.gui_camera)
             mujoco.mjv_defaultOption(self.gui_opt)
@@ -184,15 +203,26 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
         self.prev_torques_measured = applied_torques.copy()
 
         self.robot_data.ctrl = applied_torques
+        real_time_before = time.perf_counter_ns()
+        mj_time_before = self.robot_data.time
         mujoco.mj_step(self.robot_model, self.robot_data)
-
+        real_time_after = time.perf_counter_ns()
+        mj_time_after = self.robot_data.time
+        # print(
+        #     (mj_time_after - mj_time_before)
+        #     / (real_time_after - real_time_before)
+        #     * 1e9
+        # )
         if self.gui:
-            # TODO: create second mj instance in other process where we just copy the state every self.fps and render async.
             self.render()
 
         return applied_torques
 
     def render(self):
+        if self.async_render:
+            self._maybe_send_state()
+            return
+        # render here
         viewport = mujoco.MjrRect(0, 0, self.gui_width, self.gui_height)
         mujoco.mjv_updateScene(
             self.robot_model,
@@ -204,8 +234,8 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
             self.gui_scene,
         )
         mujoco.mjr_render(viewport, self.gui_scene, self.gui_context)
-        mujoco.glfw.glfw.swap_buffers(self.gui_window)
-        mujoco.glfw.glfw.poll_events()
+        glfw.swap_buffers(self.gui_window)
+        glfw.poll_events()
 
     def set_robot_state(self, robot_state):
         log.warning(
@@ -217,3 +247,93 @@ class MujocoManipulatorEnv(AbstractControlledEnv):
         mujoco.mj_step(self.robot_model, self.robot_data)
         if self.gui:
             self.render()
+
+    def _maybe_send_state(self):
+        """Send state to render process at reduced FPS."""
+        # Only send every Nth step
+        step_interval = max(1, self.hz // self.gui_fps)
+        if (
+            int(self.robot_data.time / self.robot_model.opt.timestep) % step_interval
+            == 0
+        ):
+            # Non-blocking replace old state
+            try:
+                while True:
+                    self._state_queue.get_nowait()
+                    print("Queue clear")
+            except Exception:
+                print("Empty queue clear")
+                pass
+            # Shallow copy of qpos, qvel
+            state = {
+                "qpos": self.robot_data.qpos.copy(),
+                "qvel": self.robot_data.qvel.copy(),
+                "time": self.robot_data.time,
+            }
+            try:
+                self._state_queue.put_nowait(state)
+                print(f"Sent {self.robot_data.time}")
+            except Exception:
+                pass
+
+    def close(self):
+        """Stop render process."""
+        if self.gui and self._render_proc.is_alive():
+            self._render_proc.terminate()
+            self._render_proc.join()
+
+
+def _render_loop(queue, robot_desc_mjcf_path, width, height, fps):
+    """Render process: read state and draw at up to `fps`."""
+    # import glfw
+    # import mujoco
+
+    model = mujoco.MjModel.from_xml_path(robot_desc_mjcf_path)
+    data = mujoco.MjData(model)
+
+    mujoco.mj_resetData(model, data)
+
+    cam = mujoco.MjvCamera()
+    opt = mujoco.MjvOption()
+
+    glfw.init()
+    window = glfw.create_window(width, height, "Async Mujoco GUI", None, None)
+    glfw.make_context_current(window)
+    glfw.swap_interval(1)
+
+    mujoco.mjv_defaultCamera(cam)
+    mujoco.mjv_defaultOption(opt)
+
+    scene = mujoco.MjvScene(model, maxgeom=10000)
+    context = mujoco.MjrContext(model, mujoco.mjtFontScale.mjFONTSCALE_150.value)
+    data = mujoco.MjData(model)
+
+    last_draw = 0.0
+    while not glfw.window_should_close(window):
+        try:
+            # # non-blocking get with rerender if no new sim data
+            # state = queue.get(timeout=1.0 / fps)
+            # blocking get ensuring no old data is rendered
+            state = queue.get()
+            # apply to a separate MjData
+            data.qpos[:] = state["qpos"]
+            data.qvel[:] = state["qvel"]  # TODO should this be zero?
+            # data.ctrl = data.qfrc_bias # TODO do we need this
+            print(f"Received {state['time']}")
+        except Exception as e:
+            print("Empty queue get")
+            pass
+        now = time.time()
+        if now - last_draw >= 1.0 / fps:
+            print(now - last_draw)
+            last_draw = now
+            mujoco.mj_forward(model, data)
+            viewport = mujoco.MjrRect(0, 0, width, height)
+            mujoco.mjv_updateScene(
+                model, data, opt, None, cam, mujoco.mjtCatBit.mjCAT_ALL.value, scene
+            )
+            mujoco.mjr_render(viewport, scene, context)
+            glfw.swap_buffers(window)
+
+        glfw.poll_events()
+    glfw.terminate()
