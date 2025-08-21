@@ -233,7 +233,11 @@ class BaseRobotInterface:
         start_time = time.time()
 
         # Script & chunk policy
-        scripted_policy = torch.jit.script(torch_policy)
+        robot_state = self.get_robot_state()
+        example_inputs = {
+            k: getattr(robot_state, k) for k in robot_state.DESCRIPTOR.fields_by_name
+        }
+        scripted_policy = torch.jit.script(torch_policy, example_inputs=example_inputs)
         msg_generator = self._get_msg_generator(scripted_policy)
 
         # Send policy as stream
