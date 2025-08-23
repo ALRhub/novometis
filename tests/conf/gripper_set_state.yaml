@@ -1,0 +1,17 @@
+# usage: python tests/gripper_set_state.py
+
+robot:
+  name: panda
+  ip_address: localhost
+  gripper_port: 50052
+  gripper_speed: 0.1
+  gripper_force: 0.1
+
+fps: 30
+
+# sets level of all command line loggers to 'DEBUG'
+# https://hydra.cc/docs/tutorials/basic/running_your_app/logging/
+hydra:
+  job_logging:
+    root:
+      level: DEBUG
