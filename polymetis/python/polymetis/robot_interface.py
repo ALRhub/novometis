@@ -415,6 +415,45 @@ class RobotInterface(BaseRobotInterface):
         """Sets the home pose for `go_home()` to use."""
         self.home_pose = to_tensor(home_pose)
 
+    def set_home_ee_pose(
+        self,
+        home_position: TensorLike | None = None,
+        home_orientation: TensorLike | None = None,
+    ):
+        """Sets the home end-effector pose for `go_home()` to use."""
+        if home_position is None and home_orientation is None:
+            log.warning(
+                "Both position and orientation are None. Home pose will not be changed."
+            )
+            return
+
+        default_home_joint_positions = torch.tensor(self.metadata.rest_pose)
+        default_home_ee_pos, default_home_ee_quat = self.robot_model.forward_kinematics(
+            default_home_joint_positions
+        )
+
+        home_ee_pos = (
+            to_tensor(home_position)
+            if home_position is not None
+            else default_home_ee_pos
+        )
+        home_ee_quat = (
+            to_tensor(home_orientation)
+            if home_orientation is not None
+            else default_home_ee_quat
+        )
+
+        home_joint_positions, success = self.solve_inverse_kinematics(
+            home_ee_pos, home_ee_quat, default_home_joint_positions
+        )
+        if not success:
+            log.warning(
+                "Unable to find valid joint target. Skipping set_home_ee_pose command..."
+            )
+            return []
+
+        self.set_home_pose(home_joint_positions)
+
     def set_robot_model(
         self, robot_description_path: str, ee_link_name: str | None = None
     ):
@@ -567,7 +606,9 @@ class RobotInterface(BaseRobotInterface):
             Same as `send_torch_policy`
         """
         if position is None and orientation is None:
-            log.warning("Both position and orientation are None. No movement will be executed.")
+            log.warning(
+                "Both position and orientation are None. No movement will be executed."
+            )
             return []
 
         state = self.get_robot_state()
