@@ -80,28 +80,42 @@ pip install -e ./polymetis
 git clone git@github.com:ALRhub/novometis.git
 cd novometis
 mamba env create -n "novometis_server_cpu" -f polymetis/environment_server_cpu.yml
-conda activate novometis_server_cpu
+mamba activate novometis_server_cpu
+pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.8.0" torchvision
+pip install hydra-core mujoco
 
 # if build_libfranka.sh fails because of readline errors (bash version but conda only knows incompatible readline 8.2 still)
 # then overwrite env libreadline with system one (there is probably a better proper way to doing this)
-ln -s /usr/lib/libreadline.so.8.3 ~/.conda/envs/novometis_server_cpu/lib/libreadline.so.8.3   
-ln -sf ~/.conda/envs/novometis_server_cpu/lib/libreadline.so.8.3 ~/.conda/envs/novometis_server_cpu/lib/libreadline.so.8
+ln -s /usr/lib/libreadline.so.8.3 "${CONDA_PREFIX}/lib/libreadline.so.8.3"   
+ln -sf "${CONDA_PREFIX}/lib/libreadline.so.8.3" "${CONDA_PREFIX}/lib/libreadline.so.8"
 
 # pytorch ships some old version of protobuf which causes compilation issues.
 # renaming seems like a dumb approach but I can't figure out how to make cmake ignore that subdir otherwise
-mv ~/.conda/envs/novometis_server_cpu/lib/python3.13/site-packages/torch/include/google/protobuf ~/.conda/envs/novometis_server_cpu/lib/python3.13/site-packages/torch/include/google/protobuf-backup
+mv "${CONDA_PREFIX}/lib/python3.13/site-packages/torch/include/google/protobuf" "${CONDA_PREFIX}/lib/python3.13/site-packages/torch/include/google/protobuf-backup"
+
+# you probably need libfranka, so build it
+./scripts/build_libfranka.sh
+# but the first try will probably fail because the current poco version requires C++17, so modify
+sed -i 's/^set(CMAKE_CXX_STANDARD 14)$/set(CMAKE_CXX_STANDARD 17)/' polymetis/src/clients/franka_panda_client/third_party/libfranka/CMakeLists.txt
+# to `set(CMAKE_CXX_STANDARD 17)` and retry
+./scripts/build_libfranka.sh
 
 # compile and install stuff
 ./scripts/build_polymetis.sh
 
 # undo renaming (if you care, seems to work fine in renamed state and makes recompile easier)
-mv ~/.conda/envs/novometis_server_cpu/lib/python3.13/site-packages/torch/include/google/protobuf-backup ~/.conda/envs/novometis_server_cpu/lib/python3.13/site-packages/torch/include/google/protobuf
+mv "${CONDA_PREFIX}/lib/python3.13/site-packages/torch/include/google/protobuf-backup" "${CONDA_PREFIX}/lib/python3.13/site-packages/torch/include/google/protobuf"
 
 # try 
 launch_robot.py -cp=$(pwd)/polymetis robot_client=empty_statistics_client use_real_time=False
+# depending on your distro/.bashrc, you might need an empty export
+# export LD_LIBRARY_PATH=
 
 # or launch this
 launch_robot.py -cp=$(pwd)/polymetis robot_client=franka_hardware use_real_time=False robot_client.executable_cfg.mock=true   
+# or launch this
+launch_robot.py -cp=$(pwd)/polymetis robot_client=franka_mujoco_sim use_real_time=False
+
 # and then run (separately)
 benchmark_control_latency.py
 ```
