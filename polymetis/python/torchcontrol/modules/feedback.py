@@ -151,7 +151,7 @@ class HybridJointSpacePD(toco.ControlModule):
         """
         Kp = jacobian.T @ self.Kx @ jacobian + self.Kq
         Kd = jacobian.T @ self.Kxd @ jacobian + self.Kqd
-        return Kp @ (joint_pos_desired - joint_pos_current) + Kd @ (
+        return Kp @ (joint_pos_desired - joint_pos_current).clamp(-0.05, 0.05) + Kd @ (
             joint_vel_desired - joint_vel_current
         )
 
