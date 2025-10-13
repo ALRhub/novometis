@@ -147,30 +147,47 @@ Status
 PolymetisControllerServerImpl::ControlUpdate(ServerContext *context,
                                              const RobotState *robot_state,
                                              TorqueCommand *torque_command) {
+  PROFILE_FUNCTION();
   // Check if last update is stale
-  if (!validRobotContext()) {
-    spdlog::warn("Interrupted control update greater than threshold of {} ns. "
-                 "Reverting to default controller...",
-                 threshold_ns_);
-    custom_controller_context_.status = TERMINATING;
+  {
+    PROFILE_SCOPE("Checking Robot Context");
+    if (!validRobotContext()) {
+      spdlog::warn(
+          "Interrupted control update greater than threshold of {} ns. "
+          "Reverting to default controller...",
+          threshold_ns_);
+      custom_controller_context_.status = TERMINATING;
+    }
   }
 
-  // Parse robot state
-  torch_robot_state_->update_state(
-      robot_state->timestamp().seconds(), robot_state->timestamp().nanos(),
-      std::vector<float>(robot_state->joint_positions().begin(),
-                         robot_state->joint_positions().end()),
-      std::vector<float>(robot_state->joint_velocities().begin(),
-                         robot_state->joint_velocities().end()),
-      std::vector<float>(robot_state->motor_torques_measured().begin(),
-                         robot_state->motor_torques_measured().end()),
-      std::vector<float>(robot_state->motor_torques_external().begin(),
-                         robot_state->motor_torques_external().end()));
+  {
+    PROFILE_SCOPE("Parsing Robot State");
 
-  // Lock to prevent 1) controller updates while controller is running; 2)
-  // external termination during controller selection, which might cause loading
-  // of a uninitialized default controller
-  custom_controller_context_.controller_mtx.lock();
+    // Parse robot state
+    torch_robot_state_->update_state(
+        robot_state->timestamp().seconds(), robot_state->timestamp().nanos(),
+        // std::vector<float>(robot_state->joint_positions().begin(),
+        std::vector<float>(
+            [&robot_state]() -> decltype(auto) {
+              PROFILE_FUNCTION();
+              return robot_state->joint_positions();
+            }().begin(),
+            robot_state->joint_positions().end()),
+        std::vector<float>(robot_state->joint_velocities().begin(),
+                           robot_state->joint_velocities().end()),
+        std::vector<float>(robot_state->motor_torques_measured().begin(),
+                           robot_state->motor_torques_measured().end()),
+        std::vector<float>(robot_state->motor_torques_external().begin(),
+                           robot_state->motor_torques_external().end()));
+  }
+
+  {
+    PROFILE_SCOPE("Locking Controller");
+    // Lock to prevent 1) controller updates while controller is running; 2)
+    // external termination during controller selection, which might cause
+    // loading of a uninitialized default controller
+    custom_controller_context_.controller_mtx.lock();
+  }
 
   // Update episode markers
   if (custom_controller_context_.status == READY) {
@@ -198,7 +215,10 @@ PolymetisControllerServerImpl::ControlUpdate(ServerContext *context,
   }
   std::vector<float> desired_torque;
   try {
-    desired_torque = controller->forward(*torch_robot_state_);
+    {
+      PROFILE_SCOPE("Controller forward");
+      desired_torque = controller->forward(*torch_robot_state_);
+    }
   } catch (const std::exception &e) {
     custom_controller_context_.controller_mtx.unlock();
     std::string error_msg =
@@ -209,18 +229,24 @@ PolymetisControllerServerImpl::ControlUpdate(ServerContext *context,
 
   // Unlock
   custom_controller_context_.controller_mtx.unlock();
-  for (int i = 0; i < num_dofs_; i++) {
-    torque_command->add_joint_torques(desired_torque[i]);
+  {
+    PROFILE_SCOPE("Torque command set");
+    for (int i = 0; i < num_dofs_; i++) {
+      torque_command->add_joint_torques(desired_torque[i]);
+    }
   }
   setTimestampToNow(torque_command->mutable_timestamp());
 
   // Record robot state
-  RobotState robot_state_copy(*robot_state);
-  for (int i = 0; i < num_dofs_; i++) {
-    robot_state_copy.add_joint_torques_computed(
-        torque_command->joint_torques(i));
+  {
+    PROFILE_SCOPE("Copying robot state computed torques");
+    RobotState robot_state_copy(*robot_state);
+    for (int i = 0; i < num_dofs_; i++) {
+      robot_state_copy.add_joint_torques_computed(
+          torque_command->joint_torques(i));
+    }
+    robot_state_buffer_.append(robot_state_copy);
   }
-  robot_state_buffer_.append(robot_state_copy);
 
   // Update timestep & check termination
   if (custom_controller_context_.status == RUNNING) {
@@ -271,6 +297,7 @@ Status PolymetisControllerServerImpl::SetController(
     resetControllerContext();
     std::swap(custom_controller_context_.custom_controller, new_controller);
     custom_controller_context_.status = READY;
+    Instrumentor::Instance().beginSession("Server");
 
     custom_controller_context_.controller_mtx.unlock();
     spdlog::info("Loaded new controller.");
@@ -295,6 +322,7 @@ Status PolymetisControllerServerImpl::SetController(
 Status PolymetisControllerServerImpl::UpdateController(
     ServerContext *context, ServerReader<ControllerChunk> *stream,
     LogInterval *interval) {
+  PROFILE_FUNCTION();
   std::lock_guard<std::mutex> service_lock(service_mtx_);
   int orig_prio = setThreadPriority(RT_LOW_PRIO);
 
@@ -303,11 +331,14 @@ Status PolymetisControllerServerImpl::UpdateController(
 
   // Read chunks of the binary serialized controller params container.
   updates_model_buffer_.clear();
-  ControllerChunk chunk;
-  while (stream->Read(&chunk)) {
-    std::string binary_blob = chunk.torchscript_binary_chunk();
-    for (int i = 0; i < binary_blob.size(); i++) {
-      updates_model_buffer_.push_back(binary_blob[i]);
+  {
+    PROFILE_SCOPE("Reading data");
+    ControllerChunk chunk;
+    while (stream->Read(&chunk)) {
+      std::string binary_blob = chunk.torchscript_binary_chunk();
+      for (int i = 0; i < binary_blob.size(); i++) {
+        updates_model_buffer_.push_back(binary_blob[i]);
+      }
     }
   }
 
@@ -322,10 +353,14 @@ Status PolymetisControllerServerImpl::UpdateController(
   // Update controller & set intervals
   if (custom_controller_context_.status == RUNNING) {
     try {
-      custom_controller_context_.controller_mtx.lock();
-      interval->set_start(robot_state_buffer_.size());
-      custom_controller_context_.custom_controller->param_dict_update_module();
-      custom_controller_context_.controller_mtx.unlock();
+      {
+        PROFILE_SCOPE("Update controller");
+        custom_controller_context_.controller_mtx.lock();
+        interval->set_start(robot_state_buffer_.size());
+        custom_controller_context_.custom_controller
+            ->param_dict_update_module();
+        custom_controller_context_.controller_mtx.unlock();
+      }
 
     } catch (const std::exception &e) {
       custom_controller_context_.controller_mtx.unlock();
@@ -357,6 +392,7 @@ Status PolymetisControllerServerImpl::TerminateController(
   if (custom_controller_context_.status == RUNNING) {
     custom_controller_context_.controller_mtx.lock();
     custom_controller_context_.status = TERMINATING;
+    Instrumentor::Instance().endSession();
     custom_controller_context_.controller_mtx.unlock();
 
     // Respond with start & end index

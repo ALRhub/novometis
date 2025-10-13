@@ -42,6 +42,9 @@ target_include_directories(torch_server_ops PUBLIC ${COMMON_INCLUDE_DIRS})
 target_link_libraries(torch_server_ops PRIVATE
     ${TORCH_LIBRARIES}
 )
+target_include_directories(torch_server_ops PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/../include
+  )
 
 add_library(torchrot SHARED src/rotations.cpp)
 set_target_properties(torchrot PROPERTIES CXX_VISIBILITY_PRESET hidden)

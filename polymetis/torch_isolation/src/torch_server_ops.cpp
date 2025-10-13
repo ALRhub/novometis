@@ -3,6 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 #include "torch_server_ops.hpp"
+#include "polymetis/profile.hpp"
 #include <filesystem>
 #include <istream>
 #include <streambuf>
@@ -104,6 +105,7 @@ void TorchRobotState::update_state(int timestamp_s, int timestamp_ns,
                                    std::vector<float> joint_velocities,
                                    std::vector<float> motor_torques_measured,
                                    std::vector<float> motor_torques_external) {
+  PROFILE_FUNCTION();
   rs_timestamp_->data[0] = timestamp_s;
   rs_timestamp_->data[1] = timestamp_ns;
   for (int i = 0; i < joint_positions.size(); i++) {
@@ -181,91 +183,97 @@ TorchScriptedController::~TorchScriptedController() {
 }
 
 std::vector<float> TorchScriptedController::forward(TorchRobotState &input) {
+  PROFILE_FUNCTION();
   torch::NoGradGuard no_grad;
   // Step controller & generate torque command response
   c10::Dict<torch::jit::IValue, torch::jit::IValue> controller_state_dict =
       module_->data.forward(input.input_->data).toGenericDict();
 
-  torch::jit::IValue key = torch::jit::IValue("joint_torques");
-  torch::Tensor desired_torque = controller_state_dict.at(key).toTensor();
+  {
+    PROFILE_SCOPE("Copying");
+    torch::jit::IValue key = torch::jit::IValue("joint_torques");
+    torch::Tensor desired_torque = controller_state_dict.at(key).toTensor();
 
-  std::vector<float> result;
-  for (int i = 0; i < input.num_dofs_; i++) {
-    result.push_back(desired_torque[i].item<float>());
-  }
+    std::vector<float> result;
+    for (int i = 0; i < input.num_dofs_; i++) {
+      result.push_back(desired_torque[i].item<float>());
+    }
+    {
+      PROFILE_SCOPE("Logging");
+      if (log_to_csv_ && file_logger_) {
+        auto now = std::chrono::system_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      now.time_since_epoch())
+                      .count();
+        // Build ordered list of (key, flattened float values)
+        std::vector<std::pair<std::string, std::vector<float>>> kvs;
+        for (const auto &item : controller_state_dict) {
+          // key as string
+          std::string k = item.key().toStringRef();
+          // value expected to be a tensor/sequence of floats
+          std::vector<float> vals;
+          try {
+            if (item.value().isTensor()) {
+              auto t = item.value().toTensor().contiguous();
+              auto numel = t.numel();
+              vals.reserve(numel);
+              for (int64_t i = 0; i < numel; ++i) {
+                vals.push_back(t.view(-1)[i].item<float>());
+              }
+            } else if (item.value().isTuple() || item.value().isList()) {
+              auto list = item.value().toList();
+              vals.reserve(list.size());
+              for (const c10::IValue &v : list) {
+                vals.push_back(v.toDouble());
+              }
 
-  if (log_to_csv_ && file_logger_) {
-    auto now = std::chrono::system_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                  now.time_since_epoch())
-                  .count();
-    // Build ordered list of (key, flattened float values)
-    std::vector<std::pair<std::string, std::vector<float>>> kvs;
-    for (const auto &item : controller_state_dict) {
-      // key as string
-      std::string k = item.key().toStringRef();
-      // value expected to be a tensor/sequence of floats
-      std::vector<float> vals;
-      try {
-        if (item.value().isTensor()) {
-          auto t = item.value().toTensor().contiguous();
-          auto numel = t.numel();
-          vals.reserve(numel);
-          for (int64_t i = 0; i < numel; ++i) {
-            vals.push_back(t.view(-1)[i].item<float>());
+            } else {
+              // skip non-float-array entries
+              continue;
+            }
+          } catch (...) {
+            continue;
           }
-        } else if (item.value().isTuple() || item.value().isList()) {
-          auto list = item.value().toList();
-          vals.reserve(list.size());
-          for (const c10::IValue &v : list) {
-            vals.push_back(v.toDouble());
+          kvs.emplace_back(std::move(k), std::move(vals));
+        }
+        // When enabled, write dynamic CSV header once: time, key_index...
+        if (!csv_dynamic_header_initialized_) {
+          std::vector<std::string> headers;
+          headers.push_back("time");
+          for (const auto &p : kvs) {
+            const auto &key = p.first;
+            const auto &vals = p.second;
+            for (size_t i = 0; i < vals.size(); ++i) {
+              headers.push_back(key + "_" + std::to_string(i));
+            }
           }
-
-        } else {
-          // skip non-float-array entries
-          continue;
+          // join headers with commas
+          std::string header_line;
+          for (size_t i = 0; i < headers.size(); ++i) {
+            if (i)
+              header_line += ",";
+            header_line += headers[i];
+          }
+          file_logger_->info("{}", header_line);
+          csv_dynamic_header_initialized_ = true;
         }
-      } catch (...) {
-        continue;
-      }
-      kvs.emplace_back(std::move(k), std::move(vals));
-    }
-    // When enabled, write dynamic CSV header once: time, key_index...
-    if (!csv_dynamic_header_initialized_) {
-      std::vector<std::string> headers;
-      headers.push_back("time");
-      for (const auto &p : kvs) {
-        const auto &key = p.first;
-        const auto &vals = p.second;
-        for (size_t i = 0; i < vals.size(); ++i) {
-          headers.push_back(key + "_" + std::to_string(i));
+        // Build CSV row: time,...
+        std::string row;
+        row += std::to_string(ms);
+        for (const auto &p : kvs) {
+          for (double v : p.second) {
+            row += ",";
+            // format with 6 decimal places
+            char buf[64];
+            std::snprintf(buf, sizeof(buf), "%.6f", v);
+            row += buf;
+          }
         }
-      }
-      // join headers with commas
-      std::string header_line;
-      for (size_t i = 0; i < headers.size(); ++i) {
-        if (i)
-          header_line += ",";
-        header_line += headers[i];
-      }
-      file_logger_->info("{}", header_line);
-      csv_dynamic_header_initialized_ = true;
-    }
-    // Build CSV row: time,...
-    std::string row;
-    row += std::to_string(ms);
-    for (const auto &p : kvs) {
-      for (double v : p.second) {
-        row += ",";
-        // format with 6 decimal places
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "%.6f", v);
-        row += buf;
+        file_logger_->info("{}", row);
       }
     }
-    file_logger_->info("{}", row);
+    return result;
   }
-  return result;
 }
 
 void TorchScriptedController::warmup_controller(
@@ -291,11 +299,15 @@ void TorchScriptedController::reset() {
 }
 
 bool TorchScriptedController::param_dict_load(char *data, size_t size) {
+  PROFILE_FUNCTION();
   memstream model_stream(data, size);
 
   torch::jit::script::Module param_dict_container;
   try {
-    param_dict_container = torch::jit::load(model_stream);
+    {
+      PROFILE_SCOPE("jit::load");
+      param_dict_container = torch::jit::load(model_stream);
+    }
   } catch (const c10::Error &e) {
     std::cerr << "error loading the param container:\n";
     std::cerr << e.msg() << std::endl;
@@ -303,15 +315,26 @@ bool TorchScriptedController::param_dict_load(char *data, size_t size) {
   }
 
   // Create controller update input dict
-  param_dict_input_->data.clear();
-  param_dict_input_->data.push_back(
-      param_dict_container.forward(empty_input_->data));
+  {
+    PROFILE_SCOPE("clear");
+    param_dict_input_->data.clear();
+  }
+  {
+    PROFILE_SCOPE("forward+push_back");
+    param_dict_input_->data.push_back(
+        param_dict_container.forward(empty_input_->data));
+  }
 
   return true;
 }
 
 void TorchScriptedController::param_dict_update_module() {
-  module_->data.get_method("update")(param_dict_input_->data);
+  PROFILE_FUNCTION();
+  [&]() -> decltype(auto) {
+    PROFILE_FUNCTION();
+    return module_->data.get_method("update");
+  }()(param_dict_input_->data);
+  // module_->data.get_method("update")(param_dict_input_->data);
 }
 
 } /* extern "C" */

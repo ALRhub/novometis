@@ -22,6 +22,7 @@
 #include "polymetis.grpc.pb.h"
 
 #include "polymetis/utils.h"
+#include "polymetis/profile.hpp"
 #include "torch_server_ops.hpp"
 #include "yaml-cpp/yaml.h"
 

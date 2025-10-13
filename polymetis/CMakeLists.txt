@@ -115,7 +115,7 @@ target_link_libraries(generated_grpc_protos
 
 if(BUILD_SERVER)
   # Add server
-  add_library(polymetis_server "src/polymetis_server.cpp")
+  add_library(polymetis_server "src/polymetis_server.cpp" "src/profile.cpp")
   target_include_directories(polymetis_server PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/include
       ${CMAKE_CURRENT_BINARY_DIR}
