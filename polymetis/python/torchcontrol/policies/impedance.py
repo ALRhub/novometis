@@ -109,6 +109,10 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         self.joint_pos_desired = torch.nn.Parameter(to_tensor(joint_pos_current))
         self.joint_vel_desired = torch.zeros_like(self.joint_pos_desired)
 
+        self.ema_decay = 1
+        self.joint_pos_desired_ema = torch.clone(self.joint_pos_desired)
+        self.joint_vel_desired_ema = torch.clone(self.joint_vel_desired)
+
     def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Args:
@@ -117,6 +121,8 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         Returns:
             A dictionary containing the controller output
         """
+        self.joint_pos_desired_ema += self.ema_decay * (self.joint_pos_desired-self.joint_pos_desired_ema)
+        self.joint_vel_desired_ema += self.ema_decay * (self.joint_vel_desired-self.joint_vel_desired_ema)
         # State extraction
         joint_pos_current = state_dict["joint_positions"]
         joint_vel_current = state_dict["joint_velocities"]
@@ -125,8 +131,8 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         torque_feedback = self.joint_pd(
             joint_pos_current,
             joint_vel_current,
-            self.joint_pos_desired,
-            self.joint_vel_desired,
+            self.joint_pos_desired_ema,
+            self.joint_vel_desired_ema,
             self.robot_model.compute_jacobian(joint_pos_current),
         )
         torque_feedforward = self.invdyn(
