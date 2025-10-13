@@ -13,7 +13,7 @@ def to_tensor(input: TensorLike, ensure_copy: bool = False) -> torch.Tensor:
     """Converts the input into a ``torch.Tensor`` of the default dtype on the
     cpu.
     """
-    t = torch.as_tensor(input, device="cpu")
+    t = torch.as_tensor(input, dtype=torch.get_default_dtype(), device="cpu")
     if t is input and ensure_copy:
         t = t.clone()
     return t
