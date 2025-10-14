@@ -128,6 +128,13 @@ class HybridJointSpacePD(toco.ControlModule):
         self.Kx = torch.nn.Parameter(Kx)
         self.Kxd = torch.nn.Parameter(Kxd)
 
+        self.joint_pos_error_limit = float("inf")
+        self.joint_pos_error_norm_limit = float("inf")
+        self.p_torque_limit = float("inf")
+        self.p_torque_norm_limit = float("inf")
+        self.torque_limit = float("inf")
+        self.torque_norm_limit = float("inf")
+
     def forward(
         self,
         joint_pos_current: torch.Tensor,
@@ -151,9 +158,32 @@ class HybridJointSpacePD(toco.ControlModule):
         """
         Kp = jacobian.T @ self.Kx @ jacobian + self.Kq
         Kd = jacobian.T @ self.Kxd @ jacobian + self.Kqd
-        return Kp @ (joint_pos_desired - joint_pos_current).clamp(-0.05, 0.05) + Kd @ (
-            joint_vel_desired - joint_vel_current
-        )
+
+        pos_error = joint_pos_desired - joint_pos_current
+        pos_error = clamp_elementwise(pos_error, self.joint_pos_error_limit)
+        pos_error = clamp_norm(pos_error, self.joint_pos_error_norm_limit)
+
+        p_torque = Kp @ pos_error
+        p_torque = clamp_elementwise(p_torque, self.p_torque_limit)
+        p_torque = clamp_norm(p_torque, self.p_torque_norm_limit)
+
+        d_torque = Kd @ (joint_vel_desired - joint_vel_current)
+
+        torque = p_torque + d_torque
+        torque = clamp_elementwise(torque, self.torque_limit)
+        torque = clamp_norm(torque, self.torque_norm_limit)
+        return torque
+
+
+def clamp_elementwise(tensor: torch.Tensor, limit: float):
+    return tensor.clamp(-limit, limit)
+
+
+def clamp_norm(tensor: torch.Tensor, limit: float):
+    norm_factor = limit / (tensor.norm(p=2, dim=-1) + 1e-9)
+    # don't scale up, only down
+    clamped_norm_factor = norm_factor.clamp(max=1.0)
+    return tensor * clamped_norm_factor
 
 
 class CartesianSpacePDFast(toco.ControlModule):
