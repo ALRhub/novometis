@@ -1,11 +1,14 @@
+import math
+from math import atan2, sqrt
 from time import sleep
-import matplotlib.pyplot as plt
 from typing import List
-import numpy as np
 
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
 
 from polymetis import RobotInterface
-import torch
+
 
 def plot_robot_states_by_joint(robot_states: List["RobotState"]):
     """
@@ -218,7 +221,8 @@ def plot_robot_states_grid(robot_states: List["RobotState"]):
     fig.tight_layout()
     plt.show()
 
-def plot_robot_states_grid_linked_x(robot_states: List['RobotState']):
+
+def plot_robot_states_grid_linked_x(robot_states: List["RobotState"]):
     """
     Single figure: 3 rows x N columns (one column per joint).
     All subplots for a given time axis are coupled so zooming/panning the x-axis
@@ -231,7 +235,11 @@ def plot_robot_states_grid_linked_x(robot_states: List['RobotState']):
     times = []
     for i, rs in enumerate(robot_states):
         ts = getattr(rs, "timestamp", None)
-        if ts is not None and hasattr(ts, "seconds") and (ts.seconds != 0 or getattr(ts, "nanos", 0) != 0):
+        if (
+            ts is not None
+            and hasattr(ts, "seconds")
+            and (ts.seconds != 0 or getattr(ts, "nanos", 0) != 0)
+        ):
             times.append(float(ts.seconds) + float(getattr(ts, "nanos", 0)) * 1e-9)
         else:
             times.append(float(i))
@@ -259,6 +267,7 @@ def plot_robot_states_grid_linked_x(robot_states: List['RobotState']):
         raise ValueError("No joint data found in robot_states")
 
     T = len(robot_states)
+
     def build_array(field_name, n_cols):
         arr = np.full((T, n_cols), np.nan, dtype=float)
         for t, rs in enumerate(robot_states):
@@ -275,23 +284,23 @@ def plot_robot_states_grid_linked_x(robot_states: List['RobotState']):
     rows = 3
     # sharex='all' couples x-axis across all subplots. Also keep sharex='col' would share per column;
     # use 'all' to ensure every subplot shares the same x-axis.
-    fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3 * rows), sharex='all')
+    fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3 * rows), sharex="all")
     if cols == 1:
         axes = axes.reshape(rows, 1)
 
-    torque_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    torque_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
     for j in range(n_joints):
         # Position subplot (row 0)
         ax_pos = axes[0, j]
-        ax_pos.plot(times, pos_arr[:, j], linestyle='-', marker=None, color='C0')
+        ax_pos.plot(times, pos_arr[:, j], linestyle="-", marker=None, color="C0")
         ax_pos.set_ylabel("Position")
         ax_pos.set_title(f"Joint {j}")
         ax_pos.grid(True)
 
         # Velocity subplot (row 1)
         ax_vel = axes[1, j]
-        ax_vel.plot(times, vel_arr[:, j], linestyle='-', marker=None, color='C1')
+        ax_vel.plot(times, vel_arr[:, j], linestyle="-", marker=None, color="C1")
         ax_vel.set_ylabel("Velocity")
         ax_vel.grid(True)
 
@@ -300,12 +309,12 @@ def plot_robot_states_grid_linked_x(robot_states: List['RobotState']):
         for idx, fname in enumerate(torque_field_names):
             arr = torque_arrs[fname][:, j]
             color = torque_colors[idx % len(torque_colors)]
-            ax_tq.plot(times, arr, linestyle='-', marker=None, color=color, label=fname)
+            ax_tq.plot(times, arr, linestyle="-", marker=None, color=color, label=fname)
         ax_tq.set_ylabel("Torque (Nm)")
         ax_tq.set_xlabel("Time (s)")
         ax_tq.grid(True)
         if j == cols - 1:
-            ax_tq.legend(loc='upper left', fontsize='small')
+            ax_tq.legend(loc="upper left", fontsize="small")
 
     fig.tight_layout()
 
@@ -324,6 +333,7 @@ def plot_robot_states_grid_linked_x(robot_states: List['RobotState']):
     #     ax.callbacks.connect('xlim_changed', lambda ax_instance: on_xlim_changed(ax_instance))
 
     plt.show()
+
 
 def output_episode_stats(episode_name, robot_states):
     latency_arr = np.array(
@@ -344,6 +354,137 @@ def output_episode_stats(episode_name, robot_states):
     )
 
 
+def list_franka_singularities(current_config: torch.Tensor):
+    # based on https://arxiv.org/pdf/2211.02516
+    # Robot parameters (replace with actual values if different)
+    # copied from https://inria.hal.science/hal-02265293/document or https://github.com/Pradn1l/Rospy-FK-7Axis-Robot?tab=readme-ov-file
+    a5 = -0.0825
+    a7 = 0.088
+    d3 = 0.316
+    d5 = 0.384
+
+    cc1 = current_config[0]
+    cc2 = current_config[1]
+    cc3 = current_config[2]
+    cc4 = current_config[3]
+    cc5 = current_config[4]
+    cc6 = current_config[5]
+    cc7 = current_config[6]
+
+    configs = []
+
+    # A) s(q2)=0 ∧ c(q3)=0 ∧ c(q5)=0
+    # s(q2)=0 -> q2 = 0 or pi
+    q2_A = 0.0 if cc2 < math.pi / 2 else math.pi
+    # c(q3)=0 -> q3 = pi/2 or -pi/2
+    q3_A = -math.pi / 2 if cc3 < 0 else math.pi / 2
+    # c(q5)=0 -> q5 = pi/2 or -pi/2
+    q5_A = -math.pi / 2 if cc5 < 0 else math.pi / 2
+    qA = torch.tensor(
+        [cc1, q2_A, q3_A, cc4, q5_A, cc6, cc7],
+        dtype=torch.float32,
+    )
+    configs.append(qA)
+
+    # B) c(q5)=0 ∧ fsing,1(q4,q6)=0
+    # c(q5)=0 -> q5 = pi/2
+    q5_B = math.pi / 2
+    # fsing,1 = c(q4)*a5*(a7 + (d3+d5)*s(q6)) + s(q4)*( -a7*d3 + (a5**2 - d5*d3)*s(q6) ) = 0
+    # Solve for q6 given chosen q4. choose q4 = 0.42
+    q4_B = cc4
+    # Let S = s(q6). Solve linear equation in S: [c(q4)*a5*(d3+d5) + s(q4)*(a5**2 - d5*d3)] * S + c(q4)*a5*a7 - s(q4)*a7*d3 = 0
+    coeff_S = math.cos(q4_B) * a5 * (d3 + d5) + math.sin(q4_B) * (a5**2 - d5 * d3)
+    const_term = math.cos(q4_B) * a5 * a7 - math.sin(q4_B) * a7 * d3
+    # S = -const_term / coeff_S  (check domain)
+    S = -const_term / coeff_S if abs(coeff_S) > 1e-12 else 0.0
+    # clamp S into [-1,1]
+    S = max(-1.0, min(1.0, S))
+    q6_B = math.asin(S)
+    qB = torch.tensor(
+        [cc1, cc2, cc3, q4_B, q5_B, q6_B, cc7], dtype=torch.float32
+    )
+    configs.append(qB)
+
+    # C) q4 = arctan( a5(d3 + d5) / ( -a5**2 + d5*d3 ) ) ∧ s(q5)=0
+    num = a5 * (d3 + d5)
+    den = - a5**2 + d5 * d3
+    q4_C = math.atan2(num, den)
+    # s(q5)=0 -> q5 = 0 or pi; choose 0
+    q5_C = 0.0
+    qC = torch.tensor(
+        [cc1, cc2, cc3, q4_C, q5_C, cc6, cc7], dtype=torch.float32
+    )
+    configs.append(qC)
+
+    # D) s(q2)=0 ∧ fsing,2(q3,q4,q5,q6)=0
+    # s(q2)=0 -> q2 = 0
+    q2_D = 0.0
+    # fsing,2 is complicated. We'll pick q3,q4,q5 and solve for q6 numerically.
+    # choose q3 = 0.42, q4 = 0.42, q5 = 0.42 (note s(q2)=0 requirement is already met)
+    q3_D = cc3
+    q4_D = cc4
+    q5_D = cc5
+
+    # define fsing_2 as python function (using paper's expression)
+    def fsing2(q3, q4, q5, q6):
+        x = math.tan(q4)
+        y = math.sqrt(x * x + 1.0)
+        c3 = math.cos(q3)
+        s3 = math.sin(q3)
+        c5 = math.cos(q5)
+        s5 = math.sin(q5)
+        c2_q5 = c5 * c5
+        term1 = -a5 * (x ** 2 * a5 + y * x * d3 + (1 - y) * a5) * c3 * a7 * c2_q5
+        term2 = a5 * s3 * (x ** 2 * a5 + y * x * d3 + (1 - y) * a5) * a7 * s5 * c5
+        inner = (a5**2 - d5 * d3) * x + (d3 + d5) * a5
+        term3 = (
+            -(math.sin(q6) * inner - a7 * (d3 * x - a5)) * c3 * (y * a5 + d5 * x - a5)
+        )
+        return term1 + term2 + term3
+
+    # solve for q6 by scanning for sign change and then bisection
+    def find_q6_for_fsing2(q3, q4, q5):
+        # search interval [-pi, pi]
+        N = 361
+        qs = [-math.pi + 2 * math.pi * i / (N - 1) for i in range(N)]
+        vals = [fsing2(q3, q4, q5, q) for q in qs]
+        for i in range(len(qs) - 1):
+            if vals[i] == 0 or vals[i] * vals[i + 1] < 0:
+                a = qs[i]
+                b = qs[i + 1]
+                fa = vals[i]
+                fb = vals[i + 1]
+                for _ in range(50):
+                    m = 0.5 * (a + b)
+                    fm = fsing2(q3, q4, q5, m)
+                    if abs(fm) < 1e-9:
+                        return m
+                    if fa * fm <= 0:
+                        b = m
+                        fb = fm
+                    else:
+                        a = m
+                        fa = fm
+                return 0.5 * (a + b)
+        # fallback: return default
+        return cc6
+
+    q6_D = find_q6_for_fsing2(q3_D, q4_D, q5_D)
+    qD = torch.tensor(
+        [cc1, q2_D, q3_D, q4_D, q5_D, q6_D, cc7], dtype=torch.float32
+    )
+    configs.append(qD)
+
+    # return list
+    configs_list = configs
+
+    # Print / return
+    for i, c in enumerate(configs_list, start=1):
+        print(f"Singularity {i} config:", c.tolist())
+
+    return configs_list
+
+
 if __name__ == "__main__":
     robot = RobotInterface()
 
@@ -351,22 +492,43 @@ if __name__ == "__main__":
         "Control loop latency stats in milliseconds (avg / std / max / min / success_rate): "
     )
 
-
-
     init = robot.get_joint_positions()
     init_pos, init_quat = robot.get_ee_pose()
 
-    robot.start_cartesian_impedance(Kx=torch.zeros_like(robot.Kx_default), Kxd=torch.zeros_like(robot.Kxd_default))
+    robot.start_cartesian_impedance(
+        # Kx=torch.zeros_like(robot.Kx_default), Kxd=torch.zeros_like(robot.Kxd_default)
+    )
     robot.update_desired_ee_pose(init_pos + torch.tensor([0.05, 0, 0]), init_quat)
-    sleep(1) # wait to finish    
+    sleep(2)  # wait to finish
     robot.update_desired_ee_pose(init_pos, init_quat)
-    sleep(1) # wait to finish
+    sleep(2)  # wait to finish
     robot_states = robot.get_previous_log()
     plot_robot_states_grid_linked_x(robot_states)
-    
+
+
+    # # test singularities
+    # singular_configs = list_franka_singularities(init)
+    # for singular_joints in singular_configs:
+    #     robot_states = robot.move_to_joint_positions(
+    #         singular_joints
+    #     )
+    #     robot_states = robot.move_to_joint_positions(
+    #         singular_joints
+    #     )
+    #     plot_robot_states_grid_linked_x(robot_states)
+    #     robot.start_cartesian_impedance()
+    #     robot.update_desired_ee_pose(
+    #         robot.get_ee_pose()[0] + 0.05 * torch.svd(robot.get_jacobian(robot.get_joint_positions())).U[:3,-1], robot.get_ee_pose()[1]
+    #     )
+    #     sleep(1)
+    #     robot_states = robot.get_previous_log()
+    #     plot_robot_states_grid_linked_x(robot_states)
+        
 
     # Test cartesian PD
-    robot_states = robot.move_to_ee_pose(init_pos + torch.tensor([0.05, 0, 0]), init_quat)
+    robot_states = robot.move_to_ee_pose(
+        init_pos + torch.tensor([0.05, 0, 0]), init_quat
+    )
     plot_robot_states_grid_linked_x(robot_states)
 
     # Test cartesian PD
@@ -378,7 +540,9 @@ if __name__ == "__main__":
     # robot_states = robot.move_to_joint_positions(0.5 * init, Kq=Kq, Kqd=Kqd, time_to_go=15.0)
     robot_states = robot.move_to_joint_positions(0.5 * init)
     plot_robot_states_grid_linked_x(robot_states)
-    robot_states = robot.move_to_joint_positions(1.0 * init,)
+    robot_states = robot.move_to_joint_positions(
+        1.0 * init,
+    )
     # plot_robot_states_grid_linked_x(robot_states)
     output_episode_stats("Joint PD", robot_states)
 
