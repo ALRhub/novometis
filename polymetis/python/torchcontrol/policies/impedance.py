@@ -184,6 +184,10 @@ class CartesianImpedanceControl(toco.PolicyModule):
         self.ee_vel_desired = torch.nn.Parameter(torch.zeros(3))
         self.ee_rvel_desired = torch.nn.Parameter(torch.zeros(3))
 
+        self.ema_decay = 0.005
+        self.ee_pos_desired_ema = torch.clone(self.ee_pos_desired)
+        self.ee_quat_desired_ema = torch.clone(self.ee_quat_desired)
+
     def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Args:
@@ -192,6 +196,11 @@ class CartesianImpedanceControl(toco.PolicyModule):
         Returns:
             A dictionary containing the controller output
         """
+        self.ee_pos_desired_ema += self.ema_decay * (self.ee_pos_desired-self.ee_pos_desired_ema)
+        self.ee_quat_desired_ema += self.ema_decay * (self.ee_quat_desired-self.ee_quat_desired_ema)
+        # lerp + norm is close enough, don't need slerp for small angles here
+        self.ee_quat_desired_ema = R.functional.normalize_quaternion(self.ee_quat_desired_ema)
+
         # State extraction
         joint_pos_current = state_dict["joint_positions"]
         joint_vel_current = state_dict["joint_velocities"]
@@ -207,8 +216,8 @@ class CartesianImpedanceControl(toco.PolicyModule):
             ee_pos_current,
             ee_quat_current,
             ee_twist_current,
-            self.ee_pos_desired,
-            self.ee_quat_desired,
+            self.ee_pos_desired_ema,
+            self.ee_quat_desired_ema,
             torch.cat([self.ee_vel_desired, self.ee_rvel_desired]),
         )
         torque_feedback = jacobian.T @ wrench_feedback
