@@ -742,15 +742,23 @@ class RobotInterface(BaseRobotInterface):
         Runs an non-blocking Cartesian impedance controller.
         The desired EE pose can be updated using `update_desired_ee_pose`
         """
-        torch_policy = toco.policies.HybridJointImpedanceControl(
-            joint_pos_current=self.get_joint_positions(),
-            Kq=self.Kq_default if Kq is None else Kq,
-            Kqd=self.Kqd_default if Kqd is None else Kqd,
-            Kx=self.Kx_default if Kx is None else Kx,
-            Kxd=self.Kxd_default if Kxd is None else Kxd,
-            robot_model=self.robot_model,
-            ignore_gravity=self.use_grav_comp,
-        )
+        # torch_policy = toco.policies.HybridJointImpedanceControl(
+        #     joint_pos_current=self.get_joint_positions(),
+        #     Kq=self.Kq_default if Kq is None else Kq,
+        #     Kqd=self.Kqd_default if Kqd is None else Kqd,
+        #     Kx=self.Kx_default if Kx is None else Kx,
+        #     Kxd=self.Kxd_default if Kxd is None else Kxd,
+        #     robot_model=self.robot_model,
+        #     ignore_gravity=self.use_grav_comp,
+        # )
+
+        torch_policy = toco.policies.CartesianImpedanceControl(
+                joint_pos_current=self.get_joint_positions(),
+                Kp=self.Kx_default if Kx is None else Kx,
+                Kd=self.Kxd_default if Kxd is None else Kxd,
+                robot_model=self.robot_model,
+                ignore_gravity=self.use_grav_comp,
+            )
 
         return self.send_torch_policy(torch_policy=torch_policy, blocking=False)
 
@@ -783,6 +791,9 @@ class RobotInterface(BaseRobotInterface):
         """Update the desired EE pose used by the Cartesian position control mode.
         Requires starting a Cartesian impedance controller with `start_cartesian_impedance` beforehand.
         """
+        self.update_current_policy({"ee_pos_desired": position, "ee_quat_desired":orientation})
+        return
+
         state = self.get_robot_state()
         joint_pos_current = torch.tensor(state.joint_positions)
         ee_pos_current, ee_quat_current = self.robot_model.forward_kinematics(
