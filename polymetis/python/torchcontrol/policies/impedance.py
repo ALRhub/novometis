@@ -292,9 +292,9 @@ class AdvancedCartesianImpedanceControl(toco.PolicyModule):
         self.workspace_box_limits: list[
             tuple[int, tuple[float, float]]
         ] = [] # [(0, (0.3, 0.31))]
-        self.ema_decay = 0.1
+        self.ema_decay = 1.0
         # Clamping limits
-        self.pos_error_limit = 0.02#float("inf")
+        self.pos_error_limit = float("inf")
         self.quat_radian_limit = float("inf")
         self.torque_rate_limit = 1000.0 # Nm/s
 
@@ -378,17 +378,17 @@ class AdvancedCartesianImpedanceControl(toco.PolicyModule):
 
         # 8. Null-space damping torque
         # Project joint velocities into nullspace of Jacobian
-        J_pinv = torch.linalg.pinv(jacobian)
-        nullspace_projector = (
-            torch.eye(joint_pos_current.shape[0], device=joint_pos_current.device)
-            - J_pinv @ jacobian
-        )
+        # J_pinv = torch.linalg.pinv(jacobian)
+        # nullspace_projector = (
+        #     torch.eye(joint_pos_current.shape[0], device=joint_pos_current.device)
+        #     - J_pinv @ jacobian
+        # )
         # torque_null_damping = 50.0 * self.K_null @ (nullspace_projector @ joint_vel_current)
-        torque_null_damping = self.K_null @ joint_vel_current
+        # torque_null_damping = self.K_null @ joint_vel_current
 
         # 9. Singularity avoidance nullspace torque
-        grad_sing = self.singularity_avoidance_gradient(joint_pos_current)
-        torque_null_sing = self.K_sing @ (nullspace_projector @ grad_sing)
+        # grad_sing = self.singularity_avoidance_gradient(joint_pos_current)
+        # torque_null_sing = self.K_sing @ (nullspace_projector @ grad_sing)
 
         # 10. Feedforward torque
         torque_ff = self.invdyn(
@@ -396,7 +396,8 @@ class AdvancedCartesianImpedanceControl(toco.PolicyModule):
         )
 
         # Total torque
-        torque_out = torque_task - torque_null_damping + torque_null_sing + torque_ff
+        # torque_out = torque_task - torque_null_damping + torque_null_sing + torque_ff
+        torque_out = torque_task + torque_ff
 
         # 11. Torque rate limiting
         # Get time and time step
@@ -404,9 +405,16 @@ class AdvancedCartesianImpedanceControl(toco.PolicyModule):
         secs_since_last = timestamp_diff_seconds(now_timestamp, self.last_timestamp)
         self.last_timestamp.copy_(now_timestamp)
 
+        # Friction dithering torque
+        time_now_secs = 1e-9 * now_timestamp[1].float()
+        # dither frequence must be integer Hz such that we can just ignore the seconds part of the time.
+        dither_f_Hz = int(10)
+        dither_torque = 0 * torch.sin(2 * math.pi * dither_f_Hz * time_now_secs)
+        torque_out += jacobian.T @ torch.ones_like(wrench_feedback) * dither_torque
+
         # limit rates
-        torque_out = self.last_torque + clamp_elementwise(torque_out-self.last_torque, self.torque_rate_limit * secs_since_last)
-        self.last_torque.copy_(torque_out)
+        # torque_out = self.last_torque + clamp_elementwise(torque_out-self.last_torque, self.torque_rate_limit * secs_since_last)
+        # self.last_torque.copy_(torque_out)
 
         return {"joint_torques": torque_out}
 
