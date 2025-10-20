@@ -8,7 +8,9 @@ import numpy as np
 import torch
 
 from polymetis import RobotInterface
+from polymetis_pb2 import RobotState
 
+import torchcontrol as toco
 
 def plot_robot_states_by_joint(robot_states: List["RobotState"]):
     """
@@ -222,7 +224,7 @@ def plot_robot_states_grid(robot_states: List["RobotState"]):
     plt.show()
 
 
-def plot_robot_states_grid_linked_x(robot_states: List["RobotState"]):
+def plot_robot_states_grid_linked_x(robot_states: List["RobotState"], robot_model: toco.models.RobotModelPinocchio):
     """
     Single figure: 3 rows x N columns (one column per joint).
     All subplots for a given time axis are coupled so zooming/panning the x-axis
@@ -262,7 +264,8 @@ def plot_robot_states_grid_linked_x(robot_states: List["RobotState"]):
     n_pos = longest_length("joint_positions")
     n_vel = longest_length("joint_velocities")
     n_torque = max((longest_length(f) for f in torque_field_names), default=0)
-    n_joints = max(n_pos, n_vel, n_torque)
+    n_posquat = 7
+    n_joints = max(n_pos, n_vel, n_torque, n_posquat)
     if n_joints == 0:
         raise ValueError("No joint data found in robot_states")
 
@@ -276,12 +279,23 @@ def plot_robot_states_grid_linked_x(robot_states: List["RobotState"]):
                 arr[t, j] = float(v)
         return arr
 
+    def build_posquat_array(n_cols):
+        arr = np.full((T, n_cols), np.nan, dtype=float)
+        for t, rs in enumerate(robot_states):
+            pos, quat = robot_model.forward_kinematics(torch.tensor(rs.joint_positions))
+            for j, v in enumerate(pos[:n_cols]):
+                arr[t, j] = float(v)
+            for j, v in enumerate(quat[:n_cols-3]):
+                arr[t, 3+j] = float(v)
+        return arr
+
     pos_arr = build_array("joint_positions", n_joints)
     vel_arr = build_array("joint_velocities", n_joints)
     torque_arrs = {f: build_array(f, n_joints) for f in torque_field_names}
+    posquat_arr = build_posquat_array(n_joints)
 
     cols = n_joints
-    rows = 3
+    rows = 4
     # sharex='all' couples x-axis across all subplots. Also keep sharex='col' would share per column;
     # use 'all' to ensure every subplot shares the same x-axis.
     fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3 * rows), sharex="all")
@@ -315,6 +329,12 @@ def plot_robot_states_grid_linked_x(robot_states: List["RobotState"]):
         ax_tq.grid(True)
         if j == cols - 1:
             ax_tq.legend(loc="upper left", fontsize="small")
+    
+        # Cartesian subplot (row 3)
+        ax_posquat = axes[3, j]
+        ax_posquat.plot(times, posquat_arr[:, j], linestyle="-", marker=None, color="C2")
+        ax_posquat.set_ylabel("Position/Quaternion")
+        ax_posquat.grid(True)
 
     fig.tight_layout()
 
@@ -503,7 +523,7 @@ if __name__ == "__main__":
     robot.update_desired_ee_pose(init_pos, init_quat)
     sleep(2)  # wait to finish
     robot_states = robot.get_previous_log()
-    plot_robot_states_grid_linked_x(robot_states)
+    plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
 
 
     # # test singularities
@@ -515,31 +535,31 @@ if __name__ == "__main__":
     #     robot_states = robot.move_to_joint_positions(
     #         singular_joints
     #     )
-    #     plot_robot_states_grid_linked_x(robot_states)
+    #     plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
     #     robot.start_cartesian_impedance()
     #     robot.update_desired_ee_pose(
     #         robot.get_ee_pose()[0] + 0.05 * torch.svd(robot.get_jacobian(robot.get_joint_positions())).U[:3,-1], robot.get_ee_pose()[1]
     #     )
     #     sleep(1)
     #     robot_states = robot.get_previous_log()
-    #     plot_robot_states_grid_linked_x(robot_states)
+    #     plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
         
 
     # Test cartesian PD
     robot_states = robot.move_to_ee_pose(
         init_pos + torch.tensor([0.05, 0, 0]), init_quat
     )
-    plot_robot_states_grid_linked_x(robot_states)
+    plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
 
     # Test cartesian PD
     robot_states = robot.move_to_ee_pose(init_pos, init_quat)
-    plot_robot_states_grid_linked_x(robot_states)
+    plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
 
     # Test joint PD
     # robot_states = robot.move_to_joint_positions(0.5 * init, Kq=Kq, Kqd=Kqd)
     # robot_states = robot.move_to_joint_positions(0.5 * init, Kq=Kq, Kqd=Kqd, time_to_go=15.0)
     robot_states = robot.move_to_joint_positions(0.5 * init)
-    plot_robot_states_grid_linked_x(robot_states)
+    plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
     robot_states = robot.move_to_joint_positions(
         1.0 * init,
     )
