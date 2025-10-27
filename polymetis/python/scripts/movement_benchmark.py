@@ -6,11 +6,12 @@ from typing import List
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torchcontrol as toco
+from polymetis_pb2 import RobotState
+from torchcontrol.transform import Rotation as R
 
 from polymetis import RobotInterface
-from polymetis_pb2 import RobotState
 
-import torchcontrol as toco
 
 def plot_robot_states_by_joint(robot_states: List["RobotState"]):
     """
@@ -224,7 +225,9 @@ def plot_robot_states_grid(robot_states: List["RobotState"]):
     plt.show()
 
 
-def plot_robot_states_grid_linked_x(robot_states: List["RobotState"], robot_model: toco.models.RobotModelPinocchio):
+def plot_robot_states_grid_linked_x(
+    robot_states: List["RobotState"], robot_model: toco.models.RobotModelPinocchio
+):
     """
     Single figure: 3 rows x N columns (one column per joint).
     All subplots for a given time axis are coupled so zooming/panning the x-axis
@@ -285,8 +288,8 @@ def plot_robot_states_grid_linked_x(robot_states: List["RobotState"], robot_mode
             pos, quat = robot_model.forward_kinematics(torch.tensor(rs.joint_positions))
             for j, v in enumerate(pos[:n_cols]):
                 arr[t, j] = float(v)
-            for j, v in enumerate(quat[:n_cols-3]):
-                arr[t, 3+j] = float(v)
+            for j, v in enumerate(quat[: n_cols - 3]):
+                arr[t, 3 + j] = float(v)
         return arr
 
     pos_arr = build_array("joint_positions", n_joints)
@@ -329,10 +332,12 @@ def plot_robot_states_grid_linked_x(robot_states: List["RobotState"], robot_mode
         ax_tq.grid(True)
         if j == cols - 1:
             ax_tq.legend(loc="upper left", fontsize="small")
-    
+
         # Cartesian subplot (row 3)
         ax_posquat = axes[3, j]
-        ax_posquat.plot(times, posquat_arr[:, j], linestyle="-", marker=None, color="C2")
+        ax_posquat.plot(
+            times, posquat_arr[:, j], linestyle="-", marker=None, color="C2"
+        )
         ax_posquat.set_ylabel("Position/Quaternion")
         ax_posquat.grid(True)
 
@@ -420,20 +425,16 @@ def list_franka_singularities(current_config: torch.Tensor):
     # clamp S into [-1,1]
     S = max(-1.0, min(1.0, S))
     q6_B = math.asin(S)
-    qB = torch.tensor(
-        [cc1, cc2, cc3, q4_B, q5_B, q6_B, cc7], dtype=torch.float32
-    )
+    qB = torch.tensor([cc1, cc2, cc3, q4_B, q5_B, q6_B, cc7], dtype=torch.float32)
     configs.append(qB)
 
     # C) q4 = arctan( a5(d3 + d5) / ( -a5**2 + d5*d3 ) ) ∧ s(q5)=0
     num = a5 * (d3 + d5)
-    den = - a5**2 + d5 * d3
+    den = -(a5**2) + d5 * d3
     q4_C = math.atan2(num, den)
     # s(q5)=0 -> q5 = 0 or pi; choose 0
     q5_C = 0.0
-    qC = torch.tensor(
-        [cc1, cc2, cc3, q4_C, q5_C, cc6, cc7], dtype=torch.float32
-    )
+    qC = torch.tensor([cc1, cc2, cc3, q4_C, q5_C, cc6, cc7], dtype=torch.float32)
     configs.append(qC)
 
     # D) s(q2)=0 ∧ fsing,2(q3,q4,q5,q6)=0
@@ -454,8 +455,8 @@ def list_franka_singularities(current_config: torch.Tensor):
         c5 = math.cos(q5)
         s5 = math.sin(q5)
         c2_q5 = c5 * c5
-        term1 = -a5 * (x ** 2 * a5 + y * x * d3 + (1 - y) * a5) * c3 * a7 * c2_q5
-        term2 = a5 * s3 * (x ** 2 * a5 + y * x * d3 + (1 - y) * a5) * a7 * s5 * c5
+        term1 = -a5 * (x**2 * a5 + y * x * d3 + (1 - y) * a5) * c3 * a7 * c2_q5
+        term2 = a5 * s3 * (x**2 * a5 + y * x * d3 + (1 - y) * a5) * a7 * s5 * c5
         inner = (a5**2 - d5 * d3) * x + (d3 + d5) * a5
         term3 = (
             -(math.sin(q6) * inner - a7 * (d3 * x - a5)) * c3 * (y * a5 + d5 * x - a5)
@@ -490,9 +491,7 @@ def list_franka_singularities(current_config: torch.Tensor):
         return cc6
 
     q6_D = find_q6_for_fsing2(q3_D, q4_D, q5_D)
-    qD = torch.tensor(
-        [cc1, q2_D, q3_D, q4_D, q5_D, q6_D, cc7], dtype=torch.float32
-    )
+    qD = torch.tensor([cc1, q2_D, q3_D, q4_D, q5_D, q6_D, cc7], dtype=torch.float32)
     configs.append(qD)
 
     # return list
@@ -519,12 +518,16 @@ if __name__ == "__main__":
         # Kx=torch.zeros_like(robot.Kx_default), Kxd=torch.zeros_like(robot.Kxd_default)
     )
     robot.update_desired_ee_pose(init_pos + torch.tensor([0.05, 0, 0]), init_quat)
+    # robot.update_desired_ee_pose(init_pos, R.functional.quaternion_multiply(init_quat, R.functional.rotvec2quat(torch.tensor([0,0,3.14/2]))))
     sleep(2)  # wait to finish
+    # break to settle
+    # robot.update_desired_joint_positions(robot.get_joint_positions())
+    sleep(2)  # wait to finish
+    # robot.update_desired_joint_positions(init)
     robot.update_desired_ee_pose(init_pos, init_quat)
     sleep(2)  # wait to finish
     robot_states = robot.get_previous_log()
     plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
-
 
     # # test singularities
     # singular_configs = list_franka_singularities(init)
@@ -543,7 +546,6 @@ if __name__ == "__main__":
     #     sleep(1)
     #     robot_states = robot.get_previous_log()
     #     plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
-        
 
     # Test cartesian PD
     robot_states = robot.move_to_ee_pose(

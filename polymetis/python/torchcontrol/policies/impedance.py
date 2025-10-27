@@ -116,6 +116,20 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         self.joint_pos_desired_ema = torch.clone(self.joint_pos_desired)
         self.joint_vel_desired_ema = torch.clone(self.joint_vel_desired)
 
+        self.max_desired_pos_rate_norm = 3.14 / 4  # float("inf")
+        self.max_desired_vel_rate_norm = float("inf")
+        self.max_desired_ee_pos_rate_norm = 0.05  # float("inf")
+        self.max_desired_ee_ang_rate = 3.14 / 4  # float("inf")
+        self.limiting_scales = torch.ones(
+            (4,), dtype=torch.float32, device=self.joint_pos_desired.device
+        )
+
+        self.joint_pos_desired_limited = torch.clone(self.joint_pos_desired)
+        self.joint_vel_desired_limited = torch.clone(self.joint_vel_desired)
+        self.last_timestamp = torch.zeros(
+            (2,), dtype=torch.int32, device=self.joint_pos_desired.device
+        )
+
     def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         """
         Args:
@@ -130,6 +144,68 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         self.joint_vel_desired_ema += self.ema_decay * (
             self.joint_vel_desired - self.joint_vel_desired_ema
         )
+
+        now_timestamp = state_dict["timestamp"]
+        if self.last_timestamp.sum() == 0:
+            # after init, don't allow arbitrarily much since a lot of time has past but clamp first step
+            # need to use 1e-6 time here, as zero causes issues with unbounded case as 0 * inf = nan
+            secs_since_last = 1e-6 * torch.ones(
+                (), dtype=torch.float32, device=self.last_timestamp.device
+            )
+        else:
+            secs_since_last = timestamp_diff_seconds(now_timestamp, self.last_timestamp)
+        # secs_since_last = timestamp_diff_seconds(now_timestamp, self.last_timestamp)
+        self.last_timestamp.copy_(now_timestamp)
+
+        pos_change_limit = secs_since_last * self.max_desired_pos_rate_norm
+        vel_change_limit = secs_since_last * self.max_desired_vel_rate_norm
+
+        target_delta_joint_pos = (
+            self.joint_pos_desired_ema - self.joint_pos_desired_limited
+        )
+        target_delta_joint_vel = (
+            self.joint_vel_desired_ema - self.joint_vel_desired_limited
+        )
+        self.limiting_scales[0] = clamp_norm(
+            target_delta_joint_pos,
+            pos_change_limit,
+        )
+
+        self.limiting_scales[1] = clamp_norm(
+            target_delta_joint_vel,
+            vel_change_limit,
+        )
+
+        ee_pos_change_limit = secs_since_last * self.max_desired_ee_pos_rate_norm
+        ee_angle_change_limit = secs_since_last * self.max_desired_ee_ang_rate
+
+        ee_pos_desired_ema, ee_quat_desired_ema = self.robot_model.forward_kinematics(
+            self.joint_pos_desired_ema
+        )
+
+        ee_pos_desired_limited, ee_quat_desired_limited = (
+            self.robot_model.forward_kinematics(self.joint_pos_desired_limited)
+        )
+
+        target_delta_ee_pos = ee_pos_desired_ema - ee_pos_desired_limited
+        target_delta_ee_angle = rel_quaternion_angle(
+            ee_quat_desired_limited, ee_quat_desired_ema
+        )
+
+        self.limiting_scales[2] = clamp_norm(
+            target_delta_ee_pos,
+            ee_pos_change_limit,
+        )
+        self.limiting_scales[3] = clamp_norm(
+            target_delta_ee_angle,
+            ee_angle_change_limit,
+        )
+
+        target_delta_scale = self.limiting_scales.min()
+
+        self.joint_pos_desired_limited += target_delta_scale * target_delta_joint_pos
+        self.joint_vel_desired_limited += target_delta_scale * target_delta_joint_vel
+
         # State extraction
         joint_pos_current = state_dict["joint_positions"]
         joint_vel_current = state_dict["joint_velocities"]
@@ -138,8 +214,8 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         torque_feedback = self.joint_pd(
             joint_pos_current,
             joint_vel_current,
-            self.joint_pos_desired_ema,
-            self.joint_vel_desired_ema,
+            self.joint_pos_desired_limited,
+            self.joint_vel_desired_limited,
             self.robot_model.compute_jacobian(joint_pos_current),
         )
         torque_feedforward = self.invdyn(
@@ -291,12 +367,12 @@ class AdvancedCartesianImpedanceControl(toco.PolicyModule):
         self.K_sing = torch.nn.Parameter(diagonalize_gain(to_tensor(K_sing)))
         self.workspace_box_limits: list[
             tuple[int, tuple[float, float]]
-        ] = [] # [(0, (0.3, 0.31))]
+        ] = []  # [(0, (0.3, 0.31))]
         self.ema_decay = 1.0
         # Clamping limits
         self.pos_error_limit = float("inf")
         self.quat_radian_limit = float("inf")
-        self.torque_rate_limit = 1000.0 # Nm/s
+        self.torque_rate_limit = 1000.0  # Nm/s
 
         # Target joint config
         self.joint_pos_desired = torch.nn.Parameter(to_tensor(joint_pos_current))
@@ -312,8 +388,9 @@ class AdvancedCartesianImpedanceControl(toco.PolicyModule):
         self.ee_quat_target_ema = torch.clone(self.ee_quat_target)
 
         self.last_torque = torch.clone(self.joint_pos_desired)
-        self.last_timestamp = torch.zeros((2,), dtype=torch.int32, device=self.joint_pos_desired.device)
-
+        self.last_timestamp = torch.zeros(
+            (2,), dtype=torch.int32, device=self.joint_pos_desired.device
+        )
 
     def forward(self, state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         joint_pos_current = state_dict["joint_positions"]
@@ -434,8 +511,20 @@ def clamp_elementwise(tensor: torch.Tensor, limit: float):
 def clamp_norm(tensor: torch.Tensor, limit: float):
     norm_factor = limit / (tensor.norm(p=2, dim=-1) + 1e-9)
     # don't scale up, only down
-    clamped_norm_factor = norm_factor.clamp(max=1.0)
-    return tensor * clamped_norm_factor
+    return norm_factor.clamp(max=1.0)
+
+
+def rel_quaternion_angle(current_q, target_q):
+    current_q = R.functional.normalize_quaternion(current_q)
+    target_q = R.functional.normalize_quaternion(target_q)
+    # relative rotation: q_rel = target * inv(current)
+    q_rel = R.functional.quaternion_multiply(
+        target_q, R.functional.invert_quaternion(current_q)
+    )
+    q_rel = R.functional.normalize_quaternion(q_rel)
+    angle = R.functional.quat2angle(q_rel)  # [...,], in radians, in [0, pi]
+    # axis = R.functional.quat2axis(q_rel)  # [...,3]
+    return angle
 
 
 def _slerp(q0, q1, t):
