@@ -206,6 +206,11 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         self.joint_pos_desired_limited += target_delta_scale * target_delta_joint_pos
         self.joint_vel_desired_limited += target_delta_scale * target_delta_joint_vel
 
+        # change of position target is also a form of velocity target.
+        # E.g. if we are supposed to hold a constant velocity but then change the position
+        # then we really should target a changed velocity
+        joint_pos_rate = (target_delta_scale * target_delta_joint_pos) / secs_since_last
+
         # State extraction
         joint_pos_current = state_dict["joint_positions"]
         joint_vel_current = state_dict["joint_velocities"]
@@ -215,7 +220,7 @@ class HybridJointImpedanceControl(toco.PolicyModule):
             joint_pos_current,
             joint_vel_current,
             self.joint_pos_desired_limited,
-            self.joint_vel_desired_limited,
+            self.joint_vel_desired_limited + joint_pos_rate,
             self.robot_model.compute_jacobian(joint_pos_current),
         )
         torque_feedforward = self.invdyn(
