@@ -6,4 +6,5 @@
 combine to create policies."""
 from .feedback import *
 from .feedforward import *
+from .interpolation import *
 from .safety import *

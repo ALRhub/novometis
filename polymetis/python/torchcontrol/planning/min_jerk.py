@@ -6,13 +6,155 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Tuple, List, Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch
 
-import torchcontrol as toco
 from torchcontrol.transform import Rotation as R
 from torchcontrol.transform import Transformation as T
+
+
+def interpolate_quartic(
+    t,  #: torch.Tensor | float,
+    x0: torch.Tensor,
+    xT: torch.Tensor,
+    v0: torch.Tensor,
+    T,  #: torch.Tensor | float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Interpolates a smooth quartic polynomial between two points, with a
+    constraint on the initial velocity and zero acceleration at the start and
+    end. The final velocity is unconstrained.
+
+    The solution is given by
+        x(t)=x0 + v0 * t + Δ * p(t/T)
+    where
+        Δ = xT - x0
+        p(s) = (1 - b0) * (2*s^3 - s^4)
+        b0 = v0 * T / (xT - x0) is normalized initial velocity.
+
+    The velocity, i.e. the first derivative, is then given by
+        x'(t) = v0 + Δ * p'(s) / T
+    where we divide by T due to the chain rule and
+        p'(s) = (1 - b0) * (6*s^2 - 4*s^3).
+
+    Args:
+        t: time
+        x0: Initial position
+        xT: Final position
+        v0: Initial velocity
+        T: Duration
+    Returns:
+        A tuple containing the position and velocity at time t.
+    """
+    s = t / T  # normalized time in [0, 1]
+
+    delta = xT - x0
+    b0 = v0 * T / (xT - x0)
+
+    p = (1 - b0) * (2 * s**3 - s**4)
+    x = x0 + v0 * t + delta * p
+
+    p_v = (1 - b0) * (6 * s**2 - 4 * s**3)
+    v = v0 + delta * p_v / T
+
+    return x, v
+
+
+def interpolate_quintic_min_jerk(
+    t,  #: torch.Tensor | float,
+    x0: torch.Tensor,
+    xT: torch.Tensor,
+    v0: torch.Tensor,
+    T,  #: torch.Tensor | float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Interpolates the minimum jerk quintic polynomial between two points,
+    with a constraint on the initial velocity and zero acceleration at the
+    start and end. The final velocity is unconstrained.
+
+    The solution is given by
+        x(t)=x0 + v0 * t + Δ * p(t/T)
+    where
+        Δ = xT - x0
+        p(s) = (1 - b0) * (5/2*s^3 - 15/8*s^4 + 3/8*s^5)
+        b0 = v0 * T / (xT - x0) is normalized initial velocity.
+
+    The velocity, i.e. the first derivative, is then given by
+        x'(t) = v0 + Δ * p'(s) / T
+    where we divide by T due to the chain rule and
+        p'(s) = (1 - b0) * (15/2*s^2 - 60/8*s^3 + 15/8*s^4).
+
+    Args:
+        t: time
+        x0: Initial position
+        xT: Final position
+        v0: Initial velocity
+        T: Duration
+    Returns:
+        A tuple containing the position and velocity at time t.
+    """
+
+    s = t / T  # normalized time in [0, 1]
+
+    delta = xT - x0
+    b0 = v0 * T / (xT - x0)
+
+    p = (1 - b0) * (2.5 * s**3 - 1.875 * s**4 + 0.375 * s**5)
+    x = x0 + v0 * t + delta * p
+
+    p_v = (1 - b0) * (7.5 * s**2 - 7.5 * s**3 + 1.875 * s**4)
+    v = v0 + delta * p_v / T
+
+    return x, v
+
+
+def interpolate_quintic_min_jerk_zero_vT(
+    t,  #: torch.Tensor | float,
+    x0: torch.Tensor,
+    xT: torch.Tensor,
+    v0: torch.Tensor,
+    T,  #: torch.Tensor | float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Interpolates the minimum jerk quintic polynomial between two points,
+    with a constraint on the initial velocity, zero final velocity, and zero
+    acceleration at the start and end.
+
+    The solution is given by
+        x(t)=x0 + v0 * t + Δ * p(t/T)
+    where
+        Δ = xT - x0
+        p(s) = (10 - 6b0)*s^3 - (15 - 8b0)*s^4 + (6 - 3b0)*s^5
+        b0 = v0 * T / (xT - x0) is normalized initial velocity.
+
+    The velocity, i.e. the first derivative, is then given by
+        x'(t) = v0 + Δ * p'(s) / T
+    where we divide by T due to the chain rule and
+        p'(s) = 3(10 - 6b0)*s^2 - 4(15 - 8b0)*s^3 + 5(6 - 3b0)*s^4.
+
+    Interestingly, the solution for the minimum jerk sextic polynomial is the
+    same, i.e. the coefficient of the 6th order term is 0.
+
+    Args:
+        t: time
+        x0: Initial position
+        xT: Final position
+        v0: Initial velocity
+        T: Duration
+    Returns:
+        A tuple containing the position and velocity at time t.
+    """
+
+    s = t / T  # normalized time in [0, 1]
+
+    delta = xT - x0
+    b0 = v0 * T / (xT - x0)
+
+    p = (10 - 6 * b0) * s**3 - (15 - 8 * b0) * s**4 + (6 - 3 * b0) * s**5
+    x = x0 + v0 * t + delta * p
+
+    p_v = 3 * (10 - 6 * b0) * s**2 - 4 * (15 - 8 * b0) * s**3 + 5 * (6 - 3 * b0) * s**4
+    v = v0 + delta * p_v / T
+
+    return x, v
 
 
 def _min_jerk_spaces(
