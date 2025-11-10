@@ -3,6 +3,7 @@
 // This source code is licensed under the MIT license found in the
 // LICENSE file in the root directory of this source tree.
 #include "torch_server_ops.hpp"
+#include <filesystem>
 #include <istream>
 #include <streambuf>
 #include <torch/jit.h>
@@ -115,12 +116,48 @@ void TorchRobotState::update_state(int timestamp_s, int timestamp_ns,
 }
 
 TorchScriptedController::TorchScriptedController(
-    char *data, size_t size, TorchRobotState &init_robot_state) {
+    char *data, size_t size, TorchRobotState &init_robot_state, bool log_to_csv)
+    : log_to_csv_(log_to_csv) {
   memstream stream(data, size);
   module_ = new TorchScriptModule{torch::jit::load(stream)};
 
   param_dict_input_ = new TorchInput{std::vector<torch::jit::IValue>()};
   empty_input_ = new TorchInput{std::vector<torch::jit::IValue>()};
+
+  if (log_to_csv_) {
+    // Create a timestamped CSV file and spdlog file logger
+    auto t = std::time(nullptr);
+    std::tm tm;
+    localtime_r(&t, &tm);
+    char buf[64];
+    std::strftime(buf, sizeof(buf),
+                  "novometis_controller_log_%Y%m%d_%H%M%S.csv", &tm);
+    logfile_path_ = std::string(buf);
+
+    // give each controller a unique name.
+    char logger_name[32];
+    std::snprintf(logger_name, sizeof(logger_name), "log_%p.csv",
+                  static_cast<void *>(this));
+
+    try {
+      auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+          logfile_path_, true);
+      file_logger_ = std::make_shared<spdlog::logger>(logger_name, sink);
+      spdlog::register_logger(file_logger_);
+      file_logger_->set_level(spdlog::level::info);
+      file_logger_->set_pattern("%v"); // print raw
+      // CSV header will be written on first forward
+      auto file_sink =
+          std::dynamic_pointer_cast<spdlog::sinks::basic_file_sink_mt>(sink);
+      std::string fname = file_sink->filename();
+      spdlog::info(
+          "File sink is writing to: {}",
+          std::filesystem::absolute(std::filesystem::path(fname)).string());
+    } catch (const spdlog::spdlog_ex &ex) {
+      std::cerr << "spdlog init failed: " << ex.what() << std::endl;
+      file_logger_.reset();
+    }
+  }
 
   // Warm up controller (TorchScript models take time to compile during first 2
   // queries)
@@ -131,6 +168,16 @@ TorchScriptedController::~TorchScriptedController() {
   delete module_;
   delete param_dict_input_;
   delete empty_input_;
+
+  // flush and drop logger to ensure file closed
+  if (file_logger_) {
+    file_logger_->flush();
+    file_logger_.reset();
+    char logger_name[32];
+    std::snprintf(logger_name, sizeof(logger_name), "log_%p.csv",
+                  static_cast<void *>(this));
+    spdlog::drop(logger_name);
+  }
 }
 
 std::vector<float> TorchScriptedController::forward(TorchRobotState &input) {
@@ -145,6 +192,78 @@ std::vector<float> TorchScriptedController::forward(TorchRobotState &input) {
   std::vector<float> result;
   for (int i = 0; i < input.num_dofs_; i++) {
     result.push_back(desired_torque[i].item<float>());
+  }
+
+  if (log_to_csv_ && file_logger_) {
+    auto now = std::chrono::system_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  now.time_since_epoch())
+                  .count();
+    // Build ordered list of (key, flattened float values)
+    std::vector<std::pair<std::string, std::vector<float>>> kvs;
+    for (const auto &item : controller_state_dict) {
+      // key as string
+      std::string k = item.key().toStringRef();
+      // value expected to be a tensor/sequence of floats
+      std::vector<float> vals;
+      try {
+        if (item.value().isTensor()) {
+          auto t = item.value().toTensor().contiguous();
+          auto numel = t.numel();
+          vals.reserve(numel);
+          for (int64_t i = 0; i < numel; ++i) {
+            vals.push_back(t.view(-1)[i].item<float>());
+          }
+        } else if (item.value().isTuple() || item.value().isList()) {
+          auto list = item.value().toList();
+          vals.reserve(list.size());
+          for (const c10::IValue &v : list) {
+            vals.push_back(v.toDouble());
+          }
+
+        } else {
+          // skip non-float-array entries
+          continue;
+        }
+      } catch (...) {
+        continue;
+      }
+      kvs.emplace_back(std::move(k), std::move(vals));
+    }
+    // When enabled, write dynamic CSV header once: time, key_index...
+    if (!csv_dynamic_header_initialized_) {
+      std::vector<std::string> headers;
+      headers.push_back("time");
+      for (const auto &p : kvs) {
+        const auto &key = p.first;
+        const auto &vals = p.second;
+        for (size_t i = 0; i < vals.size(); ++i) {
+          headers.push_back(key + "_" + std::to_string(i));
+        }
+      }
+      // join headers with commas
+      std::string header_line;
+      for (size_t i = 0; i < headers.size(); ++i) {
+        if (i)
+          header_line += ",";
+        header_line += headers[i];
+      }
+      file_logger_->info("{}", header_line);
+      csv_dynamic_header_initialized_ = true;
+    }
+    // Build CSV row: time,...
+    std::string row;
+    row += std::to_string(ms);
+    for (const auto &p : kvs) {
+      for (double v : p.second) {
+        row += ",";
+        // format with 6 decimal places
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "%.6f", v);
+        row += buf;
+      }
+    }
+    file_logger_->info("{}", row);
   }
   return result;
 }

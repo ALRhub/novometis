@@ -46,6 +46,9 @@ def main(cfg):
 
     if cfg.use_real_time:
         server_cmd += ["-r"]
+    
+    if cfg.get("log_to_csv", False):
+        server_cmd += ["-l"]
 
     conda_prefix = os.environ["CONDA_PREFIX"]
     # add conda lib to (both) envs

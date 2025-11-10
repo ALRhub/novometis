@@ -81,7 +81,7 @@ public:
   /**
   TODO
   */
-  explicit PolymetisControllerServerImpl();
+  explicit PolymetisControllerServerImpl(bool log_to_csv = false);
 
   /**
   TODO
@@ -175,6 +175,8 @@ private:
   RobotClientContext robot_client_context_;
 
   std::unique_ptr<TorchRobotState> torch_robot_state_;
+
+  bool log_to_csv_ = false;
 };
 
 #endif

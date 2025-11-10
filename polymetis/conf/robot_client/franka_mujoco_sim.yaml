@@ -4,6 +4,7 @@ hz: 1000
 gui: true
 use_grav_comp: true
 use_real_time: false
+log_to_csv: true
 
 default_Kq: [20, 30, 25, 25, 15, 10, 10]
 default_Kqd: [1.0, 1.5, 1.0, 1.0, 0.5, 0.5, 0.5]
