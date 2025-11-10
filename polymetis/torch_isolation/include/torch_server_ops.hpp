@@ -5,7 +5,10 @@
 #ifndef TORCH_SERVER_OPS_H
 #define TORCH_SERVER_OPS_H
 
+#include "spdlog/sinks/basic_file_sink.h"
+#include "spdlog/spdlog.h"
 #include <map>
+#include <memory>
 #include <vector>
 
 #ifdef __cplusplus
@@ -52,9 +55,16 @@ private:
   struct TorchInput *param_dict_input_ = nullptr;
   struct TorchInput *empty_input_ = nullptr;
 
+  // File logging
+  std::shared_ptr<spdlog::logger> file_logger_ = nullptr;
+  std::string logfile_path_;
+  bool csv_dynamic_header_initialized_ = false;
+  bool log_to_csv_ = false;
+
 public:
   TorchScriptedController(char *data, std::size_t size,
-                          TorchRobotState &init_robot_state);
+                          TorchRobotState &init_robot_state,
+                          bool log_to_csv = false);
   ~TorchScriptedController();
 
   void warmup_controller(int warmup_iters, TorchRobotState &init_robot_state);

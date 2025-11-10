@@ -6,12 +6,18 @@
 #include "real_time.hpp"
 #include "torch_server_ops.hpp"
 
-void *RunServer(void *server_address_ptr) {
-  std::string &server_address =
-      *(static_cast<std::string *>(server_address_ptr));
+struct RunServerArgs {
+  std::string &server_address;
+  bool log_to_csv;
+};
+
+void *RunServer(void *run_server_args_ptr) {
+  RunServerArgs &run_server_args =
+      *(static_cast<RunServerArgs *>(run_server_args_ptr));
+  std::string &server_address = run_server_args.server_address;
 
   // Instantiate service
-  PolymetisControllerServerImpl service;
+  PolymetisControllerServerImpl service(run_server_args.log_to_csv);
 
   // Build service
   ServerBuilder builder;
@@ -33,9 +39,11 @@ int main(int argc, char **argv) {
   if (input.cmdOptionExists("-h")) {
     spdlog::info("Usage: polymetis_server [OPTION]");
     spdlog::info("Starts a controller manager server.");
-    spdlog::info("  -h   Help");
-    spdlog::info("  -r   Use real-time");
-    spdlog::info("  -s   Change server address");
+    spdlog::info("  -h        Help");
+    spdlog::info("  -r        Use real-time");
+    spdlog::info("  -s <ip>   Change server address");
+    spdlog::info("  -p <port> Change server port");
+    spdlog::info("  -l        Log Controller Output to CSV");
     return 0;
   }
 
@@ -54,16 +62,22 @@ int main(int argc, char **argv) {
   }
   std::string server_address = ip + ":" + port;
 
+  bool log_to_csv = false;
+  if (input.cmdOptionExists("-l")) {
+    log_to_csv = true;
+  }
   spdlog::info("Using real time: {}", use_real_time);
   spdlog::info("Using server address: {}", server_address);
+  spdlog::info("Using controller logging: {}", log_to_csv);
 
   // Start real-time thread
-  void *server_address_ptr = static_cast<void *>(&server_address);
+  RunServerArgs run_server_args{server_address, log_to_csv};
+  void *run_server_args_ptr = static_cast<void *>(&run_server_args);
 
   if (!use_real_time) {
-    RunServer(server_address_ptr);
+    RunServer(run_server_args_ptr);
   } else {
-    create_real_time_thread(RunServer, server_address_ptr);
+    create_real_time_thread(RunServer, run_server_args_ptr);
   }
 
   return 0;

@@ -6,7 +6,8 @@
 
 #include "polymetis/polymetis_server.hpp"
 
-PolymetisControllerServerImpl::PolymetisControllerServerImpl() {
+PolymetisControllerServerImpl::PolymetisControllerServerImpl(bool log_to_csv)
+    : log_to_csv_(log_to_csv) {
   controller_model_buffer_.reserve(MAX_MODEL_BYTES);
   updates_model_buffer_.reserve(MAX_MODEL_BYTES);
 }
@@ -95,7 +96,7 @@ Status PolymetisControllerServerImpl::InitRobotClient(
   try {
     robot_client_context_.default_controller = new TorchScriptedController(
         controller_model_buffer_.data(), controller_model_buffer_.size(),
-        *torch_robot_state_);
+        *torch_robot_state_, false);
   } catch (const std::exception &e) {
     std::string error_msg =
         "Failed to load default controller: " + std::string(e.what());
@@ -260,7 +261,7 @@ Status PolymetisControllerServerImpl::SetController(
     // Load new controller
     auto new_controller = std::make_unique<TorchScriptedController>(
         controller_model_buffer_.data(), controller_model_buffer_.size(),
-        *torch_robot_state_);
+        *torch_robot_state_, log_to_csv_);
 
     // Switch in new controller by updating controller context
     // (note: use std::swap to put ptr to old controller in new_controller,
