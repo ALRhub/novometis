@@ -152,7 +152,11 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         )  # coriolis
         torque_out = torque_feedback + torque_feedforward
 
-        return {"joint_torques": torque_out}
+        return {
+            "joint_torques": torque_out,
+            "joint_pos_desired": joint_pos_desired,
+            "joint_vel_desired": joint_vel_desired,
+        }
 
 
 class InterpolatingHybridImpedanceControl(toco.PolicyModule):
@@ -237,7 +241,11 @@ class InterpolatingHybridImpedanceControl(toco.PolicyModule):
         )  # coriolis
         torque_out = torque_feedback + torque_feedforward
 
-        return {"joint_torques": torque_out}
+        return {
+            "joint_torques": torque_out,
+            "joint_pos_desired": joint_pos_desired,
+            "joint_vel_desired": joint_vel_desired,
+        }
 
 
 class CartesianImpedanceControl(toco.PolicyModule):

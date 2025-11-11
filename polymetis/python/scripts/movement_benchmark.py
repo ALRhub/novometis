@@ -1,5 +1,6 @@
 import math
 from math import atan2, sqrt
+from pathlib import Path
 from time import sleep
 from typing import List
 
@@ -11,6 +12,7 @@ from polymetis_pb2 import RobotState
 from torchcontrol.transform import Rotation as R
 
 from polymetis import RobotInterface
+import csv
 
 
 def plot_robot_states_by_joint(robot_states: List["RobotState"]):
@@ -357,7 +359,62 @@ def plot_robot_states_grid_linked_x(
     # for ax in all_axes:
     #     ax.callbacks.connect('xlim_changed', lambda ax_instance: on_xlim_changed(ax_instance))
 
-    plt.show()
+    return fig
+
+
+def plot_controller_log_grid_linked_x(log_dicts: list[dict[str, float]], cols: int = 7):
+    """
+    Single figure: N rows x `cols` columns
+    All subplots for a given time axis are coupled so zooming/panning the x-axis
+    in one subplot affects all others.
+    """
+    if not log_dicts:
+        raise ValueError("log_dicts list is empty")
+
+    # Extract times in seconds (fallback to index)
+    times = []
+    for i, rs in enumerate(log_dicts):
+        ts = getattr(rs, "time", None)
+        if ts is not None:
+            times.append(float(ts))
+        else:
+            times.append(float(i))
+    times = np.array(times)
+    times = times - times[0]
+
+    T = len(log_dicts)
+
+    def build_array(field_name):
+        arr = np.full((T,), np.nan, dtype=float)
+        for t, rs in enumerate(log_dicts):
+            arr[t] = float(rs.get(field_name, np.nan))
+        return arr
+
+    field_names = [f for f in log_dicts[0].keys() if f != "time"]
+
+    arrs = {f: build_array(f) for f in field_names}
+
+    rows = math.ceil(len(field_names) / cols)
+    # sharex='all' couples x-axis across all subplots. Also keep sharex='col' would share per column;
+    # use 'all' to ensure every subplot shares the same x-axis.
+    fig, axes = plt.subplots(rows, cols, figsize=(3 * cols, 3 * rows), sharex="all")
+    if cols == 1:
+        axes = axes.reshape(rows, 1)
+    if rows == 1:
+        axes = axes.reshape(1, cols)
+
+    for j, field in enumerate(field_names):
+        ax = axes[j // cols, j % cols]
+        ax.plot(times, arrs[field], linestyle="-", marker=None, color="C0")
+        ax.set_ylabel(field)
+        ax.grid(True)
+
+        if j == T - 1:
+            ax.legend(loc="upper left", fontsize="small")
+
+    fig.tight_layout()
+
+    return fig
 
 
 def output_episode_stats(episode_name, robot_states):
@@ -526,8 +583,20 @@ if __name__ == "__main__":
     # robot.update_desired_joint_positions(init)
     robot.update_desired_ee_pose(init_pos, init_quat)
     sleep(2)  # wait to finish
-    robot_states = robot.get_previous_log()
-    plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
+    # robot_states = robot.get_previous_log()
+    robot_states = robot.terminate_current_policy(return_log=True)
+    # grab last log from last server run
+    current_date = max(x for x in Path("outputs").iterdir() if x.is_dir())
+    current_time = max(x for x in current_date.iterdir() if x.is_dir())
+    current_log = max(current_time.glob("*.csv"))
+    with current_log.open(newline="", encoding="utf-8") as f:
+        data = list(csv.DictReader(f))
+    data = data[10:-1]  # drop warmup and final incomplete
+    fig1 = plot_controller_log_grid_linked_x(data, cols=7)
+    fig2 = plot_robot_states_grid_linked_x(robot_states, robot.robot_model)
+    fig1.show()
+    fig2.show()
+    pass
 
     # # test singularities
     # singular_configs = list_franka_singularities(init)
