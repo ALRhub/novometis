@@ -573,6 +573,11 @@ if __name__ == "__main__":
 
     robot.start_cartesian_impedance(
         # Kx=torch.zeros_like(robot.Kx_default), Kxd=torch.zeros_like(robot.Kxd_default)
+        update_hz=1,
+        joint_pos_rate_limit=6.28 / 8,
+        joint_vel_rate_limit=9.81 / 10,
+        ee_pos_rate_limit=0.05,
+        ee_angle_rate_limit=6.28 / 8,
     )
     robot.update_desired_ee_pose(init_pos + torch.tensor([0.05, 0, 0]), init_quat)
     # robot.update_desired_ee_pose(init_pos, R.functional.quaternion_multiply(init_quat, R.functional.rotvec2quat(torch.tensor([0,0,3.14/2]))))
