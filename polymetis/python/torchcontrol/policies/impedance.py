@@ -129,15 +129,15 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         Returns:
             A dictionary containing the controller output
         """
-        # compute safety-limited targets for joint position and velocity
-        now_timestamp = state_dict["timestamp"]
-        joint_pos_desired, joint_vel_desired = self.rate_limiter(
-            now_timestamp, self.joint_pos_desired, self.joint_vel_desired
-        )
-
         # State extraction
         joint_pos_current = state_dict["joint_positions"]
         joint_vel_current = state_dict["joint_velocities"]
+        now_timestamp = state_dict["timestamp"]
+
+        # compute safety-limited targets for joint position and velocity
+        joint_pos_desired, joint_vel_desired = self.rate_limiter(
+            now_timestamp, self.joint_pos_desired, self.joint_vel_desired
+        )
 
         # Control logic
         torque_feedback = self.joint_pd(
@@ -215,7 +215,7 @@ class InterpolatingHybridImpedanceControl(toco.PolicyModule):
         now_timestamp = state_dict["timestamp"]
 
         if self.params_updated:
-            self.interpolator.reset(now_timestamp, joint_pos_current, joint_vel_current)
+            self.interpolator.reset(now_timestamp)
             self.params_updated = False
 
         # compute desired joint positions and velocities by interpolation

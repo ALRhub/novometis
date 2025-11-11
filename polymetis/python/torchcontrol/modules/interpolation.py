@@ -17,9 +17,10 @@ class MinJerkInterpolation(toco.ControlModule):
         super().__init__()
 
         # Starting position from which to interpolate to desired position
-        pos_current = to_tensor(pos_current)
-        self.pos_init = torch.zeros_like(pos_current)
+        self.pos_init = to_tensor(pos_current, ensure_copy=True)
         self.vel_init = torch.zeros_like(pos_current)
+        self.last_pos_desired = to_tensor(pos_current, ensure_copy=True)
+        self.last_vel_desired = torch.zeros_like(pos_current)
         self.time_init = torch.zeros((2,), dtype=torch.int32)
 
         # duration of each waypoint
@@ -33,12 +34,12 @@ class MinJerkInterpolation(toco.ControlModule):
     def reset(
         self,
         time_current: torch.Tensor,
-        pos_current: torch.Tensor,
-        vel_current: torch.Tensor,
     ) -> None:
-        # Update initial conditions to current state
-        self.pos_init[:] = pos_current
-        self.vel_init[:] = vel_current
+        # Update initial conditions to the last (interpolated) target position
+        # and velocity. This prevents discontinuities in the targets, since the
+        # PD controller might never reach the targets in steady state
+        self.pos_init.copy_(self.last_pos_desired)
+        self.vel_init.copy_(self.last_vel_desired)
 
         # reset start time to current time
         self.time_init.copy_(time_current)
@@ -65,5 +66,8 @@ class MinJerkInterpolation(toco.ControlModule):
             self.vel_init,
             self.T,
         )
+
+        self.last_pos_desired.copy_(pos_desired)
+        self.last_vel_desired.copy_(vel_desired)
 
         return pos_desired, vel_desired

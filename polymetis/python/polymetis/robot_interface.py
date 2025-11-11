@@ -737,47 +737,20 @@ class RobotInterface(BaseRobotInterface):
         Kqd: TensorLike | None = None,
         Kx: TensorLike | None = None,
         Kxd: TensorLike | None = None,
-        update_hz: float | None = None,
-        joint_pos_rate_limit: TensorLike | float = float("inf"),
-        joint_vel_rate_limit: TensorLike | float = float("inf"),
-        ee_pos_rate_limit: float = float("inf"),
-        ee_angle_rate_limit: float = float("inf"),
     ):
         """Starts Cartesian position control mode.
         Runs an non-blocking Cartesian impedance controller.
         The desired EE pose can be updated using `update_desired_ee_pose`
-        If update_hz is not None, then interpolate using polynomial.
         """
-        if update_hz is None:
-            torch_policy = toco.policies.HybridJointImpedanceControl(
-                joint_pos_current=self.get_joint_positions(),
-                Kq=self.Kq_default if Kq is None else Kq,
-                Kqd=self.Kqd_default if Kqd is None else Kqd,
-                Kx=self.Kx_default if Kx is None else Kx,
-                Kxd=self.Kxd_default if Kxd is None else Kxd,
-                robot_model=self.robot_model,
-                update_hz=update_hz,
-                joint_pos_rate_limit=joint_pos_rate_limit,
-                joint_vel_rate_limit=joint_vel_rate_limit,
-                ee_pos_rate_limit=ee_pos_rate_limit,
-                ee_angle_rate_limit=ee_angle_rate_limit,
-                ignore_gravity=self.use_grav_comp,
-            )
-        else:
-            torch_policy = toco.policies.InterpolatingHybridImpedanceControl(
-                joint_pos_current=self.get_joint_positions(),
-                Kq=self.Kq_default if Kq is None else Kq,
-                Kqd=self.Kqd_default if Kqd is None else Kqd,
-                Kx=self.Kx_default if Kx is None else Kx,
-                Kxd=self.Kxd_default if Kxd is None else Kxd,
-                robot_model=self.robot_model,
-                update_hz=update_hz,
-                joint_pos_rate_limit=joint_pos_rate_limit,
-                joint_vel_rate_limit=joint_vel_rate_limit,
-                ee_pos_rate_limit=ee_pos_rate_limit,
-                ee_angle_rate_limit=ee_angle_rate_limit,
-                ignore_gravity=self.use_grav_comp,
-            )
+        torch_policy = toco.policies.HybridJointImpedanceControl(
+            joint_pos_current=self.get_joint_positions(),
+            Kq=self.Kq_default if Kq is None else Kq,
+            Kqd=self.Kqd_default if Kqd is None else Kqd,
+            Kx=self.Kx_default if Kx is None else Kx,
+            Kxd=self.Kxd_default if Kxd is None else Kxd,
+            robot_model=self.robot_model,
+            ignore_gravity=self.use_grav_comp,
+        )
 
         return self.send_torch_policy(torch_policy=torch_policy, blocking=False)
 
