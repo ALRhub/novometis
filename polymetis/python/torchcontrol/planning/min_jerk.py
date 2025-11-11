@@ -49,7 +49,7 @@ def interpolate_quartic(
     s = t / T  # normalized time in [0, 1]
 
     delta = xT - x0
-    b0 = v0 * T / (xT - x0)
+    b0 = v0 * T / (delta + 1e-9)
 
     p = (1 - b0) * (2 * s**3 - s**4)
     x = x0 + v0 * t + delta * p
@@ -96,7 +96,7 @@ def interpolate_quintic_min_jerk(
     s = t / T  # normalized time in [0, 1]
 
     delta = xT - x0
-    b0 = v0 * T / (xT - x0)
+    b0 = v0 * T / (delta + 1e-9)
 
     p = (1 - b0) * (2.5 * s**3 - 1.875 * s**4 + 0.375 * s**5)
     x = x0 + v0 * t + delta * p
@@ -146,7 +146,7 @@ def interpolate_quintic_min_jerk_zero_vT(
     s = t / T  # normalized time in [0, 1]
 
     delta = xT - x0
-    b0 = v0 * T / (xT - x0)
+    b0 = v0 * T / (delta + 1e-9)
 
     p = (10 - 6 * b0) * s**3 - (15 - 8 * b0) * s**4 + (6 - 3 * b0) * s**5
     x = x0 + v0 * t + delta * p

@@ -25,11 +25,13 @@ class UniformScalingRateLimiter(toco.ControlModule):
         # rate limits
         self.joint_pos_rate_limit = to_tensor(joint_pos_rate_limit)
         self.joint_vel_rate_limit = to_tensor(joint_vel_rate_limit)
-        self.ee_pos_rate_limit = ee_pos_rate_limit
-        self.ee_angle_rate_limit = ee_angle_rate_limit
+        self.ee_pos_rate_limit = to_tensor(ee_pos_rate_limit)
+        self.ee_angle_rate_limit = to_tensor(ee_angle_rate_limit)
 
-        self.joint_pos_desired_limited = to_tensor(joint_pos_current)
-        self.joint_vel_desired_limited = torch.zeros_like(self.joint_pos_desired)
+        self.joint_pos_desired_limited = to_tensor(joint_pos_current, ensure_copy=True)
+        self.joint_vel_desired_limited = torch.zeros_like(
+            self.joint_pos_desired_limited
+        )
         self.last_timestamp = torch.zeros((2,), dtype=torch.int32)
 
     def forward(
@@ -38,7 +40,6 @@ class UniformScalingRateLimiter(toco.ControlModule):
         joint_pos_desired: torch.Tensor,
         joint_vel_desired: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-
         secs_since_last = timestamp_diff_seconds(now_timestamp, self.last_timestamp)
         self.last_timestamp.copy_(now_timestamp)
 
@@ -47,8 +48,12 @@ class UniformScalingRateLimiter(toco.ControlModule):
             # set secs_since_last to interval corresponding to nominal 1kHz control rate
             secs_since_last.fill_(0.001)
 
-        pos_change_limit = secs_since_last * self.joint_pos_rate_limit
-        vel_change_limit = secs_since_last * self.joint_vel_rate_limit
+        pos_change_limit = mul_zero_prefer_zero(
+            secs_since_last, self.joint_pos_rate_limit
+        )
+        vel_change_limit = mul_zero_prefer_zero(
+            secs_since_last, self.joint_vel_rate_limit
+        )
 
         target_delta_joint_pos = joint_pos_desired - self.joint_pos_desired_limited
         target_delta_joint_vel = joint_vel_desired - self.joint_vel_desired_limited
@@ -61,15 +66,19 @@ class UniformScalingRateLimiter(toco.ControlModule):
         # and take the minimum
         safety_scale = torch.minimum(
             safety_scale,
-            torch.min(pos_change_limit / (target_delta_joint_pos + 1e-9)),
+            torch.min(pos_change_limit / (target_delta_joint_pos.abs() + 1e-9)),
         )
         safety_scale = torch.minimum(
             safety_scale,
-            torch.min(vel_change_limit / (target_delta_joint_vel + 1e-9)),
+            torch.min(vel_change_limit / (target_delta_joint_vel.abs() + 1e-9)),
         )
 
-        ee_pos_change_limit = secs_since_last * self.ee_pos_rate_limit
-        ee_angle_change_limit = secs_since_last * self.ee_angle_rate_limit
+        ee_pos_change_limit = mul_zero_prefer_zero(
+            secs_since_last, self.ee_pos_rate_limit
+        )
+        ee_angle_change_limit = mul_zero_prefer_zero(
+            secs_since_last, self.ee_angle_rate_limit
+        )
 
         ee_pos_desired, ee_quat_desired = self.robot_model.forward_kinematics(
             joint_pos_desired
@@ -129,3 +138,12 @@ def rel_quaternion_angle(current_q, target_q):
     angle = R.functional.quat2angle(q_rel)  # [...,], in radians, in [0, pi]
     # axis = R.functional.quat2axis(q_rel)  # [...,3]
     return angle
+
+
+def mul_zero_prefer_zero(scalar: torch.Tensor, tensor: torch.Tensor):
+    # multiplication of zero times infinity leads to results NaN
+    # but we prefer result 0
+    assert scalar.ndim == 0
+    if scalar == 0:
+        return torch.zeros_like(tensor)
+    return scalar * tensor

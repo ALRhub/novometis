@@ -45,7 +45,7 @@ class MinJerkInterpolation(toco.ControlModule):
 
     def forward(
         self, now_timestamp: torch.Tensor, pos_desired: torch.Tensor
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if self.time_init.sum() == 0:
             # in this case, reset was never called, which means the output may
             # be nonsense or unsafe
