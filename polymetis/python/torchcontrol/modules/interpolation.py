@@ -1,7 +1,10 @@
 import torch
 
 import torchcontrol as toco
-from torchcontrol.planning.min_jerk import interpolate_quintic_min_jerk_zero_vT
+from torchcontrol.planning.min_jerk import (
+    interpolate_quintic_min_jerk,
+    interpolate_quintic_min_jerk_zero_vT,
+)
 from torchcontrol.types import TensorLike
 from torchcontrol.utils.tensor_utils import to_tensor
 from torchcontrol.utils.time_utils import timestamp_diff_seconds
@@ -59,7 +62,7 @@ class MinJerkInterpolation(toco.ControlModule):
         time.clamp_max_(self.T)
 
         # compute desired joint positions and velocities by interpolation
-        pos_desired, vel_desired = interpolate_quintic_min_jerk_zero_vT(
+        pos_desired, vel_desired = interpolate_quintic_min_jerk(
             time,
             self.pos_init,
             pos_desired,

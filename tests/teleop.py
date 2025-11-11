@@ -8,7 +8,10 @@ from omegaconf import DictConfig
 from polymetis import RobotInterface
 
 from torchcontrol.policies.human import HumanControl
-from torchcontrol.policies.impedance import InterpolatingHybridImpedanceControl
+from torchcontrol.policies.impedance import (
+    HybridJointImpedanceControl,
+    InterpolatingHybridImpedanceControl,
+)
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +59,7 @@ def main(cfg: DictConfig) -> None:
 
         follower.go_home()
 
+    # follower_policy = HybridJointImpedanceControl(
     follower_policy = InterpolatingHybridImpedanceControl(
         joint_pos_current=follower.get_joint_positions(),
         Kq=follower.Kq_default,
@@ -78,8 +82,8 @@ def main(cfg: DictConfig) -> None:
     running = True
 
     while running:
-        leader_state = leader.get_state()
-        follower.update_desired_joint_positions(leader_state.joint_pos)
+        leader_state = leader.get_robot_state()
+        follower.update_desired_joint_positions(leader_state.joint_positions)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
