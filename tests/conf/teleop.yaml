@@ -1,0 +1,31 @@
+# usage: python tests/gripper_free_play.py
+
+leader:
+  name: panda3
+  ip_address: 141.3.53.154
+  arm_port: 50051
+
+follower:
+  name: panda4
+  ip_address: 141.3.53.154
+  arm_port: 50053
+
+fps: 5
+go_home: True
+home_pose: null
+
+# interpolation
+slowdown_factor: 1.0
+
+# rate limits
+joint_pos_rate_limit: null
+joint_vel_rate_limit: null
+ee_pos_rate_limit: null
+ee_angle_rate_limit: null
+
+# sets level of all command line loggers to 'DEBUG'
+# https://hydra.cc/docs/tutorials/basic/running_your_app/logging/
+hydra:
+  job_logging:
+    root:
+      level: DEBUG
