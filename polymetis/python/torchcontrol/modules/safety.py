@@ -39,7 +39,7 @@ class UniformScalingRateLimiter(toco.ControlModule):
         now_timestamp: torch.Tensor,
         joint_pos_desired: torch.Tensor,
         joint_vel_desired: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         secs_since_last = timestamp_diff_seconds(now_timestamp, self.last_timestamp)
         self.last_timestamp.copy_(now_timestamp)
 
@@ -113,17 +113,9 @@ class UniformScalingRateLimiter(toco.ControlModule):
         self.joint_pos_desired_limited.add_(safety_scale * target_delta_joint_pos)
         self.joint_vel_desired_limited.add_(safety_scale * target_delta_joint_vel)
 
-        # change of position target is also a form of velocity target.
-        # E.g. if we are supposed to hold a constant velocity but then change the position
-        # then we really should target a changed velocity
-        target_joint_pos_rate = (
-            safety_scale * target_delta_joint_pos
-        ) / secs_since_last
-
         return (
             self.joint_pos_desired_limited,
             self.joint_vel_desired_limited,
-            target_joint_pos_rate,
         )
 
 

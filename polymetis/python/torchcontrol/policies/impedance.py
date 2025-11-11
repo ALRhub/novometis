@@ -131,7 +131,7 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         """
         # compute safety-limited targets for joint position and velocity
         now_timestamp = state_dict["timestamp"]
-        joint_pos_desired, joint_vel_desired, joint_pos_rate = self.rate_limiter(
+        joint_pos_desired, joint_vel_desired = self.rate_limiter(
             now_timestamp, self.joint_pos_desired, self.joint_vel_desired
         )
 
@@ -144,7 +144,7 @@ class HybridJointImpedanceControl(toco.PolicyModule):
             joint_pos_current,
             joint_vel_current,
             joint_pos_desired,
-            joint_vel_desired + joint_pos_rate,
+            joint_vel_desired,
             self.robot_model.compute_jacobian(joint_pos_current),
         )
         torque_feedforward = self.invdyn(
@@ -220,7 +220,7 @@ class InterpolatingHybridImpedanceControl(toco.PolicyModule):
         )
 
         # compute safety-limited targets for joint position and velocity
-        joint_pos_desired, joint_vel_desired, joint_pos_rate = self.rate_limiter(
+        joint_pos_desired, joint_vel_desired = self.rate_limiter(
             now_timestamp, joint_pos_desired, joint_vel_desired
         )
 
@@ -229,7 +229,7 @@ class InterpolatingHybridImpedanceControl(toco.PolicyModule):
             joint_pos_current,
             joint_vel_current,
             joint_pos_desired,
-            joint_vel_desired + joint_pos_rate,
+            joint_vel_desired,
             self.robot_model.compute_jacobian(joint_pos_current),
         )
         torque_feedforward = self.invdyn(
