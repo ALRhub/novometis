@@ -215,13 +215,11 @@ class InterpolatingHybridImpedanceControl(toco.PolicyModule):
         now_timestamp = state_dict["timestamp"]
 
         if self.params_updated:
-            self.interpolator.reset(now_timestamp)
+            self.interpolator.reset(self.joint_pos_desired, now_timestamp)
             self.params_updated = False
 
         # compute desired joint positions and velocities by interpolation
-        joint_pos_desired, joint_vel_desired = self.interpolator(
-            now_timestamp, self.joint_pos_desired
-        )
+        joint_pos_desired, joint_vel_desired = self.interpolator(now_timestamp)
 
         # compute safety-limited targets for joint position and velocity
         joint_pos_desired, joint_vel_desired = self.rate_limiter(
