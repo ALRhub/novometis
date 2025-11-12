@@ -16,6 +16,10 @@ log = logging.getLogger(__name__)
 @hydra.main(version_base=None, config_path="./conf", config_name="teleop")
 def main(cfg: DictConfig) -> None:
     fps = cfg.fps
+    joint_pos_rate_limit = cfg.get("joint_pos_rate_limit") or float("inf")
+    joint_vel_rate_limit = cfg.get("joint_vel_rate_limit") or float("inf")
+    ee_pos_rate_limit = cfg.get("ee_pos_rate_limit") or float("inf")
+    ee_angle_rate_limit = cfg.get("ee_angle_rate_limit") or float("inf")
 
     # connect to robot arms (we don't need the grippers)
     leader = RobotInterface(
@@ -59,6 +63,10 @@ def main(cfg: DictConfig) -> None:
         Kxd=follower.Kxd_default,
         robot_model=follower.robot_model,
         ignore_gravity=follower.use_grav_comp,
+        joint_pos_rate_limit=joint_pos_rate_limit,
+        joint_vel_rate_limit=joint_vel_rate_limit,
+        ee_pos_rate_limit=ee_pos_rate_limit,
+        ee_angle_rate_limit=ee_angle_rate_limit,
     )
     follower.send_torch_policy(follower_policy, blocking=False)
 

@@ -86,6 +86,10 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         Kx: TensorLike,
         Kxd: TensorLike,
         robot_model: RobotModelPinocchio,
+        joint_pos_rate_limit: TensorLike | float = float("inf"),
+        joint_vel_rate_limit: TensorLike | float = float("inf"),
+        ee_pos_rate_limit: float = float("inf"),
+        ee_angle_rate_limit: float = float("inf"),
         ignore_gravity: bool = True,
     ):
         """
@@ -104,6 +108,14 @@ class HybridJointImpedanceControl(toco.PolicyModule):
             self.robot_model, ignore_gravity=ignore_gravity
         )
         self.joint_pd = toco.modules.feedback.HybridJointSpacePD(Kq, Kqd, Kx, Kxd)
+        self.rate_limiter = toco.modules.safety.UniformScalingRateLimiter(
+            joint_pos_current,
+            robot_model,
+            joint_pos_rate_limit=joint_pos_rate_limit,
+            joint_vel_rate_limit=joint_vel_rate_limit,
+            ee_pos_rate_limit=ee_pos_rate_limit,
+            ee_angle_rate_limit=ee_angle_rate_limit,
+        )
 
         # Reference pose
         self.joint_pos_desired = torch.nn.Parameter(to_tensor(joint_pos_current))
@@ -120,13 +132,19 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         # State extraction
         joint_pos_current = state_dict["joint_positions"]
         joint_vel_current = state_dict["joint_velocities"]
+        now_timestamp = state_dict["timestamp"]
+
+        # compute safety-limited targets for joint position and velocity
+        joint_pos_desired, joint_vel_desired = self.rate_limiter(
+            now_timestamp, self.joint_pos_desired, self.joint_vel_desired
+        )
 
         # Control logic
         torque_feedback = self.joint_pd(
             joint_pos_current,
             joint_vel_current,
-            self.joint_pos_desired,
-            self.joint_vel_desired,
+            joint_pos_desired,
+            joint_vel_desired,
             self.robot_model.compute_jacobian(joint_pos_current),
         )
         torque_feedforward = self.invdyn(
@@ -134,7 +152,11 @@ class HybridJointImpedanceControl(toco.PolicyModule):
         )  # coriolis
         torque_out = torque_feedback + torque_feedforward
 
-        return {"joint_torques": torque_out}
+        return {
+            "joint_torques": torque_out,
+            "joint_pos_desired": joint_pos_desired,
+            "joint_vel_desired": joint_vel_desired,
+        }
 
 
 class CartesianImpedanceControl(toco.PolicyModule):

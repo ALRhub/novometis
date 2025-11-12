@@ -14,6 +14,12 @@ fps: 5
 go_home: True
 home_pose: null
 
+# rate limits
+joint_pos_rate_limit: 2
+joint_vel_rate_limit: 2
+ee_pos_rate_limit: 0.20
+ee_angle_rate_limit: 2
+
 # sets level of all command line loggers to 'DEBUG'
 # https://hydra.cc/docs/tutorials/basic/running_your_app/logging/
 hydra:
