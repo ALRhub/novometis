@@ -16,14 +16,16 @@ from torchcontrol.transform import Transformation as T
 
 def interpolate_quartic(
     t,  #: torch.Tensor | float,
-    x0: torch.Tensor,
-    xT: torch.Tensor,
-    v0: torch.Tensor,
-    T,  #: torch.Tensor | float,
-) -> tuple[torch.Tensor, torch.Tensor]:
+    x0,  #: torch.Tensor | float,
+    xT,  #: torch.Tensor | float,
+    v0,  #: torch.Tensor | float,
+    T: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Interpolates a smooth quartic polynomial between two points, with a
     constraint on the initial velocity and zero acceleration at the start and
     end. The final velocity is unconstrained.
+
+    Operations are broadcast across all inputs.
 
     The solution is given by
         x(t)=x0 + v0 * t + Δ * p(t/T)
@@ -37,6 +39,11 @@ def interpolate_quartic(
     where we divide by T due to the chain rule and
         p'(s) = (1 - b0) * (6*s^2 - 4*s^3).
 
+    The acceleration, i.e. the second derivative, is then given by
+        x''(t) = Δ * p''(s) / T^2
+    where we divide by T^2 due to the chain rule and
+        p''(s) = (1 - b0) * (12*s - 12*s^2).
+
     Args:
         t: time
         x0: Initial position
@@ -48,28 +55,37 @@ def interpolate_quartic(
     """
     s = t / T  # normalized time in [0, 1]
 
+    # precompute exponentiated variable
+    s4 = s * (s3 := s * (s2 := s**2))
+
     delta = xT - x0
     b0 = v0 * T / (delta + 1e-9)
+    coeff = 1 - b0
 
-    p = (1 - b0) * (2 * s**3 - s**4)
+    p = coeff * (2.0 * s3 - s4)
     x = x0 + v0 * t + delta * p
 
-    p_v = (1 - b0) * (6 * s**2 - 4 * s**3)
+    p_v = coeff * (6.0 * s2 - 4.0 * s3)
     v = v0 + delta * p_v / T
 
-    return x, v
+    p_a = coeff * (12.0 * s - 12.0 * s2)
+    a = delta * p_a / T**2
+
+    return x, v, a
 
 
-def interpolate_quintic_min_jerk(
+def interpolate_min_jerk(
     t,  #: torch.Tensor | float,
-    x0: torch.Tensor,
-    xT: torch.Tensor,
-    v0: torch.Tensor,
-    T,  #: torch.Tensor | float,
-) -> tuple[torch.Tensor, torch.Tensor]:
+    x0,  #: torch.Tensor | float,
+    xT,  #: torch.Tensor | float,
+    v0,  #: torch.Tensor | float,
+    T: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Interpolates the minimum jerk quintic polynomial between two points,
     with a constraint on the initial velocity and zero acceleration at the
     start and end. The final velocity is unconstrained.
+
+    Operations are broadcast across all inputs.
 
     The solution is given by
         x(t)=x0 + v0 * t + Δ * p(t/T)
@@ -81,7 +97,12 @@ def interpolate_quintic_min_jerk(
     The velocity, i.e. the first derivative, is then given by
         x'(t) = v0 + Δ * p'(s) / T
     where we divide by T due to the chain rule and
-        p'(s) = (1 - b0) * (15/2*s^2 - 60/8*s^3 + 15/8*s^4).
+        p'(s) = (1 - b0) * (15/2*s^2 - 15/2*s^3 + 15/8*s^4).
+
+    The acceleration, i.e. the second derivative, is then given by
+        x''(t) = Δ * p''(s) / T^2
+    where we divide by T^2 due to the chain rule and
+        p''(s) = (1 - b0) * (15*s - 45/2*s^2 + 15/2*s^3).
 
     Args:
         t: time
@@ -95,28 +116,37 @@ def interpolate_quintic_min_jerk(
 
     s = t / T  # normalized time in [0, 1]
 
+    # precompute exponentiated variable
+    s5 = s * (s4 := s * (s3 := s * (s2 := s**2)))
+
     delta = xT - x0
     b0 = v0 * T / (delta + 1e-9)
+    coeff = 1 - b0
 
-    p = (1 - b0) * (2.5 * s**3 - 1.875 * s**4 + 0.375 * s**5)
+    p = coeff * (2.5 * s3 - 1.875 * s4 + 0.375 * s5)
     x = x0 + v0 * t + delta * p
 
-    p_v = (1 - b0) * (7.5 * s**2 - 7.5 * s**3 + 1.875 * s**4)
+    p_v = coeff * (7.5 * s2 - 7.5 * s3 + 1.875 * s4)
     v = v0 + delta * p_v / T
 
-    return x, v
+    p_a = coeff * (15.0 * s - 22.5 * s2 + 7.5 * s3)
+    a = delta * p_a / T**2
+
+    return x, v, a
 
 
-def interpolate_quintic_min_jerk_zero_vT(
+def interpolate_min_jerk_zero_vfinal(
     t,  #: torch.Tensor | float,
-    x0: torch.Tensor,
-    xT: torch.Tensor,
-    v0: torch.Tensor,
-    T,  #: torch.Tensor | float,
-) -> tuple[torch.Tensor, torch.Tensor]:
+    x0,  #: torch.Tensor | float,
+    xT,  #: torch.Tensor | float,
+    v0,  #: torch.Tensor | float,
+    T: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Interpolates the minimum jerk quintic polynomial between two points,
     with a constraint on the initial velocity, zero final velocity, and zero
     acceleration at the start and end.
+
+    Operations are broadcast across all inputs.
 
     The solution is given by
         x(t)=x0 + v0 * t + Δ * p(t/T)
@@ -125,13 +155,18 @@ def interpolate_quintic_min_jerk_zero_vT(
         p(s) = (10 - 6b0)*s^3 - (15 - 8b0)*s^4 + (6 - 3b0)*s^5
         b0 = v0 * T / (xT - x0) is normalized initial velocity.
 
+    Interestingly, the solution for the minimum jerk sextic polynomial is the
+    same, i.e. the coefficient of the 6th order term is 0.
+
     The velocity, i.e. the first derivative, is then given by
         x'(t) = v0 + Δ * p'(s) / T
     where we divide by T due to the chain rule and
         p'(s) = 3(10 - 6b0)*s^2 - 4(15 - 8b0)*s^3 + 5(6 - 3b0)*s^4.
 
-    Interestingly, the solution for the minimum jerk sextic polynomial is the
-    same, i.e. the coefficient of the 6th order term is 0.
+    The acceleration, i.e. the second derivative, is then given by
+        x''(t) = Δ * p''(s) / T^2
+    where we divide by T^2 due to the chain rule and
+        p''(s) = 6(10 - 6b0)*s - 12(15 - 8b0)*s^2 + 20(6 - 3b0)*s^3.
 
     Args:
         t: time
@@ -145,16 +180,25 @@ def interpolate_quintic_min_jerk_zero_vT(
 
     s = t / T  # normalized time in [0, 1]
 
+    # precompute exponentiated variable
+    s5 = s * (s4 := s * (s3 := s * (s2 := s**2)))
+
     delta = xT - x0
     b0 = v0 * T / (delta + 1e-9)
 
-    p = (10 - 6 * b0) * s**3 - (15 - 8 * b0) * s**4 + (6 - 3 * b0) * s**5
+    # precompute coefficients
+    p3, p4, p5 = (10 - 6 * b0), (15 - 8 * b0), (6 - 3 * b0)
+
+    p = p3 * s3 - p4 * s4 + p5 * s5
     x = x0 + v0 * t + delta * p
 
-    p_v = 3 * (10 - 6 * b0) * s**2 - 4 * (15 - 8 * b0) * s**3 + 5 * (6 - 3 * b0) * s**4
+    p_v = 3 * p3 * s2 - 4 * p4 * s3 + 5 * p5 * s4
     v = v0 + delta * p_v / T
 
-    return x, v
+    p_a = 6 * p3 * s - 12 * p4 * s2 + 20 * p5 * s3
+    a = delta * p_a / T**2
+
+    return x, v, a
 
 
 def _min_jerk_spaces(
@@ -204,24 +248,21 @@ def generate_joint_space_min_jerk(
     Returns:
         waypoints: List of waypoints
     """
-    steps = _compute_num_steps(time_to_go, hz)
-    dt = 1.0 / hz
+    time = torch.linspace(0, time_to_go, int(time_to_go * hz) + 1)
+    time.unsqueeze_(dim=-1)  # unsqueeze to broadcast over all joints
 
-    p_traj, pd_traj, pdd_traj = _min_jerk_spaces(steps, time_to_go)
-
-    D = goal - start
-    q_traj = start[None, :] + D[None, :] * p_traj[:, None]
-    qd_traj = D[None, :] * pd_traj[:, None]
-    qdd_traj = D[None, :] * pdd_traj[:, None]
+    q_traj, qd_traj, qdd_traj = interpolate_min_jerk_zero_vfinal(
+        t=time, x0=start, xT=goal, v0=torch.zeros_like(start), T=time_to_go
+    )
 
     waypoints = [
         {
-            "time_from_start": i * dt,
-            "position": q_traj[i, :],
-            "velocity": qd_traj[i, :],
-            "acceleration": qdd_traj[i, :],
+            "time_from_start": t,
+            "position": q,
+            "velocity": qd,
+            "acceleration": qdd,
         }
-        for i in range(steps)
+        for t, q, qd, qdd in zip(time, q_traj, qd_traj, qdd_traj)
     ]
 
     return waypoints
