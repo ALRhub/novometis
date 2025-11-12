@@ -8,7 +8,10 @@ from omegaconf import DictConfig
 from polymetis import RobotInterface
 
 from torchcontrol.policies.human import HumanControl
-from torchcontrol.policies.impedance import HybridJointImpedanceControl
+from torchcontrol.policies.impedance import (
+    HybridJointImpedanceControl,
+    InterpolatingHybridImpedanceControl,
+)
 
 log = logging.getLogger(__name__)
 
@@ -16,6 +19,7 @@ log = logging.getLogger(__name__)
 @hydra.main(version_base=None, config_path="./conf", config_name="teleop")
 def main(cfg: DictConfig) -> None:
     fps = cfg.fps
+    slowdown_factor = cfg.get("slowdown_factor", 1.0)
     joint_pos_rate_limit = cfg.get("joint_pos_rate_limit") or float("inf")
     joint_vel_rate_limit = cfg.get("joint_vel_rate_limit") or float("inf")
     ee_pos_rate_limit = cfg.get("ee_pos_rate_limit") or float("inf")
@@ -55,7 +59,8 @@ def main(cfg: DictConfig) -> None:
 
         follower.go_home()
 
-    follower_policy = HybridJointImpedanceControl(
+    # follower_policy = HybridJointImpedanceControl(
+    follower_policy = InterpolatingHybridImpedanceControl(
         joint_pos_current=follower.get_joint_positions(),
         Kq=follower.Kq_default,
         Kqd=follower.Kqd_default,
@@ -63,6 +68,8 @@ def main(cfg: DictConfig) -> None:
         Kxd=follower.Kxd_default,
         robot_model=follower.robot_model,
         ignore_gravity=follower.use_grav_comp,
+        update_hz=fps,
+        slowdown_factor=slowdown_factor,
         joint_pos_rate_limit=joint_pos_rate_limit,
         joint_vel_rate_limit=joint_vel_rate_limit,
         ee_pos_rate_limit=ee_pos_rate_limit,

@@ -14,6 +14,9 @@ fps: 5
 go_home: True
 home_pose: null
 
+# interpolation
+slowdown_factor: 1.2
+
 # rate limits
 joint_pos_rate_limit: 2
 joint_vel_rate_limit: 2
