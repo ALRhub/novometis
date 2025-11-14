@@ -61,6 +61,7 @@ class GripperInterface:
 
         self.open_width_threshold = open_width_threshold
         self.open_width = self.metadata.max_width - self.open_width_threshold
+        self.half_width = self.metadata.max_width / 2
 
         # Execute commands from cache in separate thread
         self._command_thr = threading.Thread(
@@ -180,16 +181,16 @@ class GripperInterface:
         self, target: float, speed: float, force: float, blocking: bool = True
     ):
         """Tries to update the state of the gripper to match the target.
-        If state >= 0.0, opens the gripper by moving to its max_width. No force
-        is exerted, and the server stays locked if the movement cannot be
-        completed.
-        If state < 0.0, closes the gripper by grasping to a width of 0. After
-        the gripper stops moving, the grasp always succeeds, since we set the
-        outer epsilon to be larger than the width of the gripper.
+        If state >= max_width/2, opens the gripper by moving to its max_width.
+        No force is exerted, and the server stays locked if the movement cannot
+        be completed.
+        If state < max_width/2, closes the gripper by grasping to a width of 0.
+        After the gripper stops moving, the grasp always succeeds, since we set
+        the outer epsilon to be larger than the width of the gripper.
 
         This command is designed to be called at high frequency (e.g. >=30Hz)
         without causing the server to deadlock. This means that some commands
-        may be ignored if they are received too quickly. This is intended for
+        may be ignored if they are sent too quickly. This is intended for
         policy rollout or tele-operation, where desired open/close states are
         sent continuously.
 
@@ -218,7 +219,7 @@ class GripperInterface:
             return
 
         # Don't open the gripper again if it's already open
-        if target >= 0.0 and state.width < self.open_width:
+        if target >= self.half_width and state.width < self.open_width:
             self.goto(
                 width=self.metadata.max_width,
                 speed=speed,
@@ -226,7 +227,7 @@ class GripperInterface:
             )
 
         # Don't close the gripper again if it's already grasping something
-        elif target < 0.0 and not state.is_grasped:
+        elif target < self.half_width and not state.is_grasped:
             self.grasp(
                 speed=speed,
                 force=force,
