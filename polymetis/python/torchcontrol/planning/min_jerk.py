@@ -53,23 +53,28 @@ def interpolate_quartic(
     Returns:
         A tuple containing the position and velocity at time t.
     """
+    # Since we could have xT = x0 and hence Δ=0, we could have infinite b0 and
+    # multiplications by zeros, so we distribute Δ into the polynomial.
+
     s = t / T  # normalized time in [0, 1]
 
     # precompute exponentiated variable
-    s4 = s * (s3 := s * (s2 := s**2))
+    s2 = s**2
+    s3 = s * s2
+    s4 = s * s3
 
     delta = xT - x0
-    b0 = v0 * T / (delta + 1e-9)
-    coeff = 1 - b0
+    v0_T = v0 * T
+    coeff = delta - v0_T
 
     p = coeff * (2.0 * s3 - s4)
-    x = x0 + v0 * t + delta * p
+    x = x0 + v0 * t + p
 
     p_v = coeff * (6.0 * s2 - 4.0 * s3)
-    v = v0 + delta * p_v / T
+    v = v0 + p_v / T
 
     p_a = coeff * (12.0 * s - 12.0 * s2)
-    a = delta * p_a / T**2
+    a = p_a / T**2
 
     return x, v, a
 
@@ -113,24 +118,29 @@ def interpolate_min_jerk(
     Returns:
         A tuple containing the position and velocity at time t.
     """
+    # Since we could have xT = x0 and hence Δ=0, we could have infinite b0 and
+    # multiplications by zeros, so we distribute Δ into the polynomial.
 
     s = t / T  # normalized time in [0, 1]
 
     # precompute exponentiated variable
-    s5 = s * (s4 := s * (s3 := s * (s2 := s**2)))
+    s2 = s**2
+    s3 = s * s2
+    s4 = s * s3
+    s5 = s * s4
 
     delta = xT - x0
-    b0 = v0 * T / (delta + 1e-9)
-    coeff = 1 - b0
+    v0_T = v0 * T
+    coeff = delta - v0_T
 
     p = coeff * (2.5 * s3 - 1.875 * s4 + 0.375 * s5)
-    x = x0 + v0 * t + delta * p
+    x = x0 + v0 * t + p
 
     p_v = coeff * (7.5 * s2 - 7.5 * s3 + 1.875 * s4)
-    v = v0 + delta * p_v / T
+    v = v0 + p_v / T
 
     p_a = coeff * (15.0 * s - 22.5 * s2 + 7.5 * s3)
-    a = delta * p_a / T**2
+    a = p_a / T**2
 
     return x, v, a
 
@@ -177,26 +187,31 @@ def interpolate_min_jerk_zero_vfinal(
     Returns:
         A tuple containing the position and velocity at time t.
     """
+    # Since we could have xT = x0 and hence Δ=0, we could have infinite b0 and
+    # multiplications by zeros, so we distribute Δ into the polynomial.
 
     s = t / T  # normalized time in [0, 1]
 
     # precompute exponentiated variable
-    s5 = s * (s4 := s * (s3 := s * (s2 := s**2)))
+    s2 = s**2
+    s3 = s * s2
+    s4 = s * s3
+    s5 = s * s4
+
 
     delta = xT - x0
-    b0 = v0 * T / (delta + 1e-9)
-
+    v0_T = v0 * T
     # precompute coefficients
-    p3, p4, p5 = (10 - 6 * b0), (15 - 8 * b0), (6 - 3 * b0)
+    p3, p4, p5 = (10 * delta - 6 * v0_T), (15 * delta - 8 * v0_T), (6 * delta - 3 * v0_T)
 
     p = p3 * s3 - p4 * s4 + p5 * s5
-    x = x0 + v0 * t + delta * p
+    x = x0 + v0 * t + p
 
     p_v = 3 * p3 * s2 - 4 * p4 * s3 + 5 * p5 * s4
-    v = v0 + delta * p_v / T
+    v = v0 + p_v / T
 
     p_a = 6 * p3 * s - 12 * p4 * s2 + 20 * p5 * s3
-    a = delta * p_a / T**2
+    a = p_a / T**2
 
     return x, v, a
 
