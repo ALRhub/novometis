@@ -87,7 +87,7 @@ class MinJerkInterpolation(toco.ControlModule):
         time = timestamp_diff_seconds(now_timestamp, self.time_init)
 
         # clamp time to [0, T*1.5]
-        time.clamp(min=0.0, max=self.T * 1.5)
+        time = time.clamp(min=0.0, max=self.T * 1.5)
 
         if time <= self.T:
             # compute desired joint positions and velocities by interpolation
